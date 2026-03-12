@@ -35,13 +35,18 @@ esac
 # ─────────────────────────────────────────────
 # WSL DETECTION
 # When someone runs curl | bash in PowerShell
-# it lands in WSL. /proc/version contains the
-# word "Microsoft" on WSL systems.
+# it lands in WSL. We check three places:
+#   1) WSL_DISTRO_NAME — always set by WSL itself
+#   2) /proc/version   — contains "microsoft" on WSL
+#   3) /proc/sys/kernel/osrelease — fallback for
+#      older WSL builds where /proc/version varies
 # We give them a choice — run the ps1 for a
 # native Windows install, or open WSL directly
 # if they actually want Red inside WSL.
 # ─────────────────────────────────────────────
-if grep -qi microsoft /proc/version 2>/dev/null; then
+if [[ -n "${WSL_DISTRO_NAME:-}" ]] || \
+   grep -qi microsoft /proc/version 2>/dev/null || \
+   grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
     echo ""
     echo "  +----------------------------------------------------------+"
     echo "  |              Looks like you're using WSL!                |"
