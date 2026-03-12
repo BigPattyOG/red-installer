@@ -82,6 +82,46 @@ function Invoke-Step {
 }
 
 # ─────────────────────────────────────────────
+# CHECK: WSL environment
+# WSL_DISTRO_NAME is always set by WSL itself.
+# WSL_INTEROP is a fallback for older WSL builds.
+# If either is present we're inside WSL and the
+# Windows-specific tooling (choco, cmd /c
+# activate.bat) will not work here.
+# We give them two clear options so they land in
+# the right place.
+# ─────────────────────────────────────────────
+function Assert-NotWSL {
+    $isWSL = ($null -ne $env:WSL_DISTRO_NAME) -or ($null -ne $env:WSL_INTEROP)
+    if ($isWSL) {
+        Write-Colour ""
+        Write-Colour "  +----------------------------------------------------------+" "Yellow"
+        Write-Colour "  |    Powershell in WSL is a interesting move, but not      |" "Yellow"
+        Write-Colour "  |                   the right one here!                    |" "Yellow"
+        Write-Colour "  +----------------------------------------------------------+" "Yellow"
+        Write-Colour ""
+        Write-Colour "  This script is built for Windows, not Linux." "White"
+        Write-Colour ""
+        Write-Colour "  Want Red inside WSL? Run the bash script directly in your" "White"
+        Write-Colour "  WSL terminal (e.g. Ubuntu from the Start Menu):" "White"
+        Write-Colour ""
+        Write-Colour "    curl -fsSL https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.sh | bash" "Cyan"
+        Write-Colour ""
+        Write-Colour "  Want Red on native Windows instead? Open a real PowerShell" "White"
+        Write-Colour "  window (not WSL) as Administrator and run:" "White"
+        Write-Colour ""
+        Write-Colour "    irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex" "Cyan"
+        Write-Colour ""
+        Write-Colour "  Either way works great — it's just down to where you want" "White"
+        Write-Colour "  Red to live!" "White"
+        Write-Colour ""
+        Write-Colour "  https://github.com/BigPattyOG/red-installer/" "Cyan"
+        Write-Colour ""
+        exit 1
+    }
+}
+
+# ─────────────────────────────────────────────
 # CHECK: Administrator
 # Chocolatey and system installs need Admin.
 # WindowsIdentity gets the current user info.
@@ -401,6 +441,7 @@ function Show-Summary {
 # input, then installs everything in order.
 # ─────────────────────────────────────────────
 function Main {
+    Assert-NotWSL
     Show-Banner
 
     Write-Colour "  This installer will set up Red-DiscordBot on Windows using" "Yellow"
