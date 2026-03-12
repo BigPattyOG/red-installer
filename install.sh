@@ -1158,7 +1158,7 @@ main() {
     echo
 
     printf "${BOLD}  Ready to begin? [y/N]: ${RESET}"
-    read -r answer
+    read -r answer </dev/tty
     if [[ ! "$answer" =~ ^[Yy]$ ]]; then
         echo
         cecho "$YELLOW" "  Cancelled. No changes were made."
