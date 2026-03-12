@@ -208,7 +208,7 @@ require_sudo() {
 # tput civis/cnorm hides and shows the cursor.
 # ─────────────────────────────────────────────
 CURRENT_STEP=""
-LOG_FILE="/tmp/redbot_install.log"
+LOG_FILE="$(mktemp /tmp/redbot_install.XXXXXX.log)"
 STEP_NUM=0
 TOTAL_STEPS=0
 
@@ -227,6 +227,34 @@ spinner() {
 }
 
 # ─────────────────────────────────────────────
+# PROGRESS BAR
+# Renders a filled/empty block bar that grows
+# as each step completes.  Called after every
+# successful run_step so the user can see at
+# a glance how far along the install is.
+# ─────────────────────────────────────────────
+show_progress_bar() {
+    local current="$1"
+    local total="$2"
+    [[ "$total" -le 0 ]] && return
+    local bar_width=30
+    local filled=$(( current * bar_width / total ))
+    local empty
+    [[ "$current" -eq "$total" ]] && filled=$bar_width
+    empty=$(( bar_width - filled ))
+    local bar="" i
+    for (( i=0; i<filled; i++ )); do bar+="█"; done
+    for (( i=0; i<empty; i++ )); do bar+="░"; done
+    # Omit trailing newline so the next step's \r can overwrite this bar line.
+    # Only the final step adds \n to leave a clean terminal state.
+    if [[ "$current" -eq "$total" ]]; then
+        printf "  ${CYAN}[%s]${RESET} %d of %d steps complete\n" "$bar" "$current" "$total"
+    else
+        printf "  ${CYAN}[%s]${RESET} %d of %d steps complete" "$bar" "$current" "$total"
+    fi
+}
+
+# ─────────────────────────────────────────────
 # RUN STEP
 # Wraps any function with a step counter,
 # spinner, and ✓ or ✗ result.
@@ -237,7 +265,13 @@ run_step() {
     local message="$1"; shift
     STEP_NUM=$(( STEP_NUM + 1 ))
     CURRENT_STEP="$message"
-    printf "\n  ${BOLD}[Step %d/%d]${RESET} %s" "$STEP_NUM" "$TOTAL_STEPS" "$message"
+    # Step 1 starts on a fresh line; steps 2+ overwrite the progress bar with \r.
+    # \e[K clears any leftover characters from the bar to the end of the line.
+    if [[ "$STEP_NUM" -eq 1 ]]; then
+        printf "\n  ${BOLD}[Step %d/%d]${RESET} %s\e[K" "$STEP_NUM" "$TOTAL_STEPS" "$message"
+    else
+        printf "\r  ${BOLD}[Step %d/%d]${RESET} %s\e[K" "$STEP_NUM" "$TOTAL_STEPS" "$message"
+    fi
 
     ( "$@" ) >"$LOG_FILE" 2>&1 &
     local pid=$!
@@ -246,10 +280,11 @@ run_step() {
     set +e; wait "$pid"; local rc=$?; set -e
 
     if [[ "$rc" -eq 0 ]]; then
-        printf "\r  ${GREEN}${BOLD}[Step %d/%d]${RESET} ${GREEN}✓${RESET} %s\n" \
+        printf "\r  ${GREEN}${BOLD}[Step %d/%d]${RESET} ${GREEN}✓${RESET} %s\e[K\n" \
             "$STEP_NUM" "$TOTAL_STEPS" "$message"
+        show_progress_bar "$STEP_NUM" "$TOTAL_STEPS"
     else
-        printf "\r  ${RED}${BOLD}[Step %d/%d]${RESET} ${RED}✗${RESET} %s\n" \
+        printf "\r  ${RED}${BOLD}[Step %d/%d]${RESET} ${RED}✗${RESET} %s\e[K\n" \
             "$STEP_NUM" "$TOTAL_STEPS" "$message"
         echo
         cecho "$RED" "  Oopsie, something went wrong during: '${message}'"
