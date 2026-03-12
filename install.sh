@@ -998,8 +998,9 @@ install_macos() {
     cecho "$YELLOW" "  ⏱  Estimated time: 5-15 minutes depending on your connection."
     echo
 
+    # After — forces read from the terminal directly
     printf "${BOLD}  Ready to begin? [y/N]: ${RESET}"
-    read -r answer
+    read -r answer </dev/tty
     if [[ ! "$answer" =~ ^[Yy]$ ]]; then
         cecho "$YELLOW" "  Cancelled. No changes were made."
         exit 0
