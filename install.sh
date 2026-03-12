@@ -208,7 +208,7 @@ require_sudo() {
 # tput civis/cnorm hides and shows the cursor.
 # ─────────────────────────────────────────────
 CURRENT_STEP=""
-LOG_FILE="/tmp/redbot_install.log"
+LOG_FILE="$(mktemp /tmp/redbot_install.XXXXXX.log)"
 STEP_NUM=0
 TOTAL_STEPS=0
 
