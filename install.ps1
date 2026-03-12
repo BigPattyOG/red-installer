@@ -1,7 +1,7 @@
 # ============================================================
 #  Red-DiscordBot Community Installer — Windows
 #  Run this in PowerShell as Administrator:
-#  irm https://raw.githubusercontent.com/dgarner-cg/red-installer/main/install.ps1 | iex
+#  irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex
 #
 #  Official guide this is based on:
 #  https://docs.discord.red/en/stable/install_guides/windows.html
@@ -48,8 +48,6 @@ $script:TotalSteps = 0
 # RUN STEP
 # Wraps a script block with a step counter and
 # success/failure output.
-# A script block is code in { } that can be
-# passed around and executed with &.
 # ─────────────────────────────────────────────
 function Invoke-Step {
     param(
@@ -176,6 +174,9 @@ function Install-Chocolatey {
 # Collects all choices from the user before
 # any installation begins so the install itself
 # can run without interruption.
+# Read-Host in PowerShell always reads from the
+# console directly so no /dev/tty equivalent
+# is needed here unlike the bash script.
 # ─────────────────────────────────────────────
 function Get-InstallOptions {
     Write-Colour ""
@@ -328,11 +329,12 @@ function Install-Red {
 function Set-RedInstance {
     $activate = "$env:USERPROFILE\redenv\Scripts\activate.bat"
     New-Item -ItemType Directory -Force -Path $script:DataDir | Out-Null
-    cmd /c "$activate && redbot-setup " +
+    $cmd = "$activate && redbot-setup " +
            "--instance-name `"$($script:InstanceName)`" " +
            "--data-path `"$($script:DataDir)`" " +
            "--backend $($script:Backend) " +
            "--no-prompt"
+    cmd /c $cmd
 }
 
 # ─────────────────────────────────────────────
@@ -343,11 +345,12 @@ function Set-RedInstance {
 # ─────────────────────────────────────────────
 function Set-TokenAndPrefix {
     $activate = "$env:USERPROFILE\redenv\Scripts\activate.bat"
-    cmd /c "$activate && redbot `"$($script:InstanceName)`" " +
+    $cmd = "$activate && redbot `"$($script:InstanceName)`" " +
            "--edit " +
            "--token `"$($script:BotToken)`" " +
            "--prefix `"$($script:BotPrefix)`" " +
            "--no-prompt"
+    cmd /c $cmd
 }
 
 # ─────────────────────────────────────────────
@@ -380,7 +383,7 @@ function Show-Summary {
         Write-Colour "    Java 17 is installed. To finish audio setup you'll need" "White"
         Write-Colour "    to run a Lavalink server alongside your bot." "White"
         Write-Colour "    Check the README for full instructions:" "White"
-        Write-Colour "    https://github.com/dgarner-cg/red-installer#audio-setup" "Cyan"
+        Write-Colour "    https://github.com/BigPattyOG/red-installer#audio-setup" "Cyan"
     }
 
     Write-Colour ""
@@ -388,7 +391,7 @@ function Show-Summary {
     Write-Colour ""
     Write-Colour "  Thanks for using this installer! If you wanna do me a solid," "White"
     Write-Colour "  please star this on GitHub if you have an account." "White"
-    Write-Colour "  https://github.com/dgarner-cg/red-installer/" "Cyan"
+    Write-Colour "  https://github.com/BigPattyOG/red-installer/" "Cyan"
     Write-Colour ""
 }
 
@@ -416,8 +419,7 @@ function Main {
     Assert-DiskSpace
 
     Write-Colour ""
-    Write-Host "  Ready to begin? [y/N]: " -NoNewline
-    $answer = Read-Host
+    $answer = Read-Host "  Ready to begin? [y/N]"
     if ($answer -notmatch '^[Yy]$') {
         Write-Colour ""
         Write-Colour "  Cancelled. No changes were made." "Yellow"
