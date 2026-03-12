@@ -63,6 +63,21 @@ irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 
 
 > **Note:** If you accidentally run the `.sh` script on Windows (e.g. via Git Bash), it'll catch that and tell you to use the PowerShell one instead. No harm done.
 
+### WSL (Windows Subsystem for Linux)
+
+Both scripts detect WSL and guide you to the right place:
+
+- **Running the bash script inside WSL** — it'll spot that and offer you two choices: carry on and install Red inside WSL (by running the bash script directly in your WSL terminal), or switch to the PowerShell script for a native Windows install instead.
+- **Running the PowerShell script inside a WSL PowerShell session** — it'll catch that too and redirect you before anything breaks, since the Windows-specific tooling (Chocolatey, `cmd`, etc.) won't work inside WSL.
+
+**Want Red inside WSL?** Open your WSL terminal (e.g. Ubuntu from the Start Menu) and run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.sh | bash
+```
+
+**Want Red on native Windows?** Open a regular PowerShell window (not WSL) as Administrator and run the PowerShell script as shown above.
+
 ---
 
 ## What It Does
