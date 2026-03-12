@@ -18,7 +18,7 @@ case "$(uname -s 2>/dev/null)" in
         echo "  However, fear not little one, you can run the Powershell one"
         echo "  instead. Open PowerShell as Administrator and run:"
         echo ""
-        echo "    irm https://raw.githubusercontent.com/dgarner-cg/red-installer/main/install.ps1 | iex"
+        echo "    irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex"
         echo ""
         echo "  This powershell script will work exactly like its shell"
         echo "  counterpart"
@@ -26,11 +26,49 @@ case "$(uname -s 2>/dev/null)" in
         echo "  Thanks for using this installer. If you wanna do me a solid, please"
         echo "  star this on github if you have an account."
         echo ""
-        echo "  https://github.com/dgarner-cg/red-installer/"
+        echo "  https://github.com/BigPattyOG/red-installer/"
         echo ""
         exit 1
         ;;
 esac
+
+# ─────────────────────────────────────────────
+# WSL DETECTION
+# When someone runs curl | bash in PowerShell
+# it lands in WSL. /proc/version contains the
+# word "Microsoft" on WSL systems.
+# We give them a choice — run the ps1 for a
+# native Windows install, or open WSL directly
+# if they actually want Red inside WSL.
+# ─────────────────────────────────────────────
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    echo ""
+    echo "  +----------------------------------------------------------+"
+    echo "  |              Looks like you're using WSL!                |"
+    echo "  +----------------------------------------------------------+"
+    echo ""
+    echo "  Looks like you ran this from PowerShell and it landed in WSL."
+    echo ""
+    echo "  You've got two options:"
+    echo ""
+    echo "  1) Install Red on Windows natively"
+    echo "     Open PowerShell as Administrator and run:"
+    echo ""
+    echo "       irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex"
+    echo ""
+    echo "  2) Install Red inside WSL"
+    echo "     Open your WSL terminal directly (e.g. Ubuntu from the"
+    echo "     Start Menu) and run this script from there:"
+    echo ""
+    echo "       curl -fsSL https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.sh | bash"
+    echo ""
+    echo "  Either way works great — it's just down to where you want"
+    echo "  Red to live!"
+    echo ""
+    echo "  https://github.com/BigPattyOG/red-installer/"
+    echo ""
+    exit 1
+fi
 
 # Exit on error
 set -Eeuo pipefail
@@ -59,7 +97,7 @@ show_banner() {
  )   / ) _)  ) D (   )( /    /\___ \  )( /    \/ (_/\/ (_/\ ) _)  )   /
 (__\_)(____)(____/  (__)\_)__)(____/ (__)\_/\_/\____/\____/(____)(__\_)
 
-        Unofficial Community Installer - By BigPattyOG
+            Unofficial Community Installer - By BigPattyOG
 
 EOF
     printf "${RESET}\n"
@@ -125,7 +163,7 @@ check_disk_space() {
     fi
 }
 
-# ──────────────���──────────────────────────────
+# ─────────────────────────────────────────────
 # INTERNET CHECK
 # Tries to reach github.com silently before
 # doing anything. --max-time 5 means give up
@@ -152,7 +190,7 @@ require_sudo() {
     if ! sudo -n true 2>/dev/null; then
         cecho "$YELLOW" "  Calling all superusers, we need your password to continue"
         echo
-        sudo true
+        sudo true </dev/tty
     fi
 }
 
@@ -226,7 +264,7 @@ run_step() {
 # ─────────────────────────────────────────────
 prompt_continue_anyway() {
     printf "${YELLOW}  Wanna proceed? [y/N]: ${RESET}"
-    read -r answer
+    read -r answer </dev/tty
     if [[ ! "$answer" =~ ^[Yy]$ ]]; then
         cecho "$YELLOW" "  Cancelled."
         exit 0
@@ -243,7 +281,7 @@ unsupported() {
     echo   "  https://docs.discord.red/en/stable/install_guides/"
     echo   ""
     echo   "  Let me know what OS you're using and I'll add support as soon as possible"
-    echo   "  https://github.com/dgarner-cg/red-installer/issues"
+    echo   "  https://github.com/BigPattyOG/red-installer/issues"
     echo
     exit 1
 }
@@ -253,7 +291,11 @@ unsupported() {
 # Collects all choices from the user before
 # any installation begins, so the install
 # itself can run without interruption.
-# ─────────────────────────────────��───────────
+# Every read uses </dev/tty so it always reads
+# from the terminal even when stdin is a pipe.
+# printf is used separately from read because
+# -p and </dev/tty conflict with each other.
+# ─────────────────────────────────────────────
 interactive_red_setup() {
     echo
     cecho "$BOLD" "  ── Red Instance Setup ──────────────────────────────────"
@@ -264,10 +306,11 @@ interactive_red_setup() {
     echo   "  Example: mybot, redbot, mainbot"
     echo   "  This won't (and can't) change the bot's name on Discord"
     echo
-    read -r -p "  Instance name: " INSTANCE_NAME
-    while [[ -z "${INSTANCE_NAME// }" ]]; do
+    while true; do
+        printf "  Instance name: "
+        read -r INSTANCE_NAME </dev/tty
+        [[ -n "${INSTANCE_NAME// }" ]] && break
         cecho "$RED" "  Cannot be empty."
-        read -r -p "  Instance name: " INSTANCE_NAME
     done
 
     # Data path
@@ -275,7 +318,8 @@ interactive_red_setup() {
     echo
     echo   "  Where should Red store its data?"
     echo   "  Press Enter to use the default: ${default_data}"
-    read -r -p "  Data path: " DATA_DIR
+    printf "  Data path: "
+    read -r DATA_DIR </dev/tty
     DATA_DIR="${DATA_DIR:-$default_data}"
 
     # Backend
@@ -284,7 +328,8 @@ interactive_red_setup() {
     echo   "  1) JSON  (simple, no extra setup — recommended)"
     echo   "  2) PostgreSQL  (advanced, requires a running PostgreSQL server)"
     echo
-    read -r -p "  Choice [1/2, default 1]: " backend_choice
+    printf "  Choice [1/2, default 1]: "
+    read -r backend_choice </dev/tty
     case "${backend_choice:-1}" in
         2) BACKEND="postgres" ;;
         *) BACKEND="json"     ;;
@@ -294,7 +339,8 @@ interactive_red_setup() {
     echo
     echo   "  Do you wanna blast your tunes through your bot?"
     echo   "  (Audio support uses Java 17 + Lavalink — see the README for setup)"
-    read -r -p "  Enable audio? [y/N]: " audio_choice
+    printf "  Enable audio? [y/N]: "
+    read -r audio_choice </dev/tty
     WANT_AUDIO=false
     [[ "$audio_choice" =~ ^[Yy]$ ]] && WANT_AUDIO=true
 
@@ -304,12 +350,12 @@ interactive_red_setup() {
     echo   "  https://discord.com/developers/applications"
     cecho  "$RED" "  NOTE: It will not be shown as you type."
     echo
-    read -r -s -p "  Bot token: " BOT_TOKEN
-    echo
-    while [[ -z "${BOT_TOKEN// }" ]]; do
-        cecho "$RED" "  With no token, you have no bot"
-        read -r -s -p "  Bot token: " BOT_TOKEN
+    while true; do
+        printf "  Bot token: "
+        read -r -s BOT_TOKEN </dev/tty
         echo
+        [[ -n "${BOT_TOKEN// }" ]] && break
+        cecho "$RED" "  With no token, you have no bot"
     done
 
     # Prefix
@@ -319,7 +365,8 @@ interactive_red_setup() {
     echo   "  e.g. ?help, !help, etc."
     echo
     cecho  "$RED" "  IT CAN'T BE /. DOESN'T WORK WELL WITH SLASH COMMANDS!"
-    read -r -p "  Prefix [default: !]: " BOT_PREFIX
+    printf "  Prefix [default: !]: "
+    read -r BOT_PREFIX </dev/tty
     BOT_PREFIX="${BOT_PREFIX:-!}"
 
     # Systemd (Linux only)
@@ -328,7 +375,8 @@ interactive_red_setup() {
         echo
         echo   "  Want this bot to always be on? We can set it up as a service"
         echo   "  so it starts automatically whenever this machine boots up."
-        read -r -p "  Set up service? [Y/n]: " svc_choice
+        printf "  Set up service? [Y/n]: "
+        read -r svc_choice </dev/tty
         [[ ! "$svc_choice" =~ ^[Nn]$ ]] && WANT_SYSTEMD=true
     fi
 
@@ -409,8 +457,6 @@ set_token_and_prefix() {
 # Creates a systemd template service file so
 # Red starts automatically on boot.
 # Only runs if the user opted in.
-# The @ makes it a template — %I is replaced
-# with the instance name at runtime.
 # ─────────────────────────────────────────────
 create_systemd_service() {
     if [[ "$WANT_SYSTEMD" != true ]]; then return 0; fi
@@ -485,11 +531,15 @@ EOF
   Audio note:
     Java is installed. To finish audio setup you'll need to run
     a Lavalink server. Check the README for instructions:
-    https://github.com/dgarner-cg/red-installer#audio-setup
+    https://github.com/BigPattyOG/red-installer#audio-setup
 EOF
     fi
 
     cat <<EOF
+
+  Thanks for using this installer! If you wanna do me a solid,
+  please star this on GitHub if you have an account.
+  https://github.com/BigPattyOG/red-installer/
 
   +----------------------------------------------------------+
 EOF
@@ -498,21 +548,10 @@ EOF
 
 # ═══════════════════════════════════════════════════════════
 # OS-SPECIFIC INSTALLERS
-# Each function installs the right packages for
-# that OS, creates a venv, then calls the shared
-# configure/token/systemd steps.
-#
-# Package lists and commands are taken directly
-# from the official Red install guides:
-# https://docs.discord.red/en/stable/install_guides/
 # ═══════════════════════════════════════════════════════════
 
 # ─────────────────────────────────────────────
 # UBUNTU 24.04 LTS
-# Official guide: deadsnakes PPA required for
-# Python 3.11 since 24.04 ships with 3.12.
-# Java is always installed per the official docs
-# regardless of audio choice.
 # https://docs.discord.red/en/stable/install_guides/ubuntu-2404.html
 # ─────────────────────────────────────────────
 install_ubuntu_2404() {
@@ -527,8 +566,6 @@ install_ubuntu_2404() {
                  sudo add-apt-repository -y ppa:deadsnakes/ppa && \
                  sudo apt-get update -q"
 
-    # Java (openjdk-17-jre-headless) is in the official package list
-    # for this OS regardless of whether the user wants audio.
     run_step "Installing system packages" \
         sudo apt-get install -y -q \
             python3.11 python3.11-dev python3.11-venv \
@@ -558,8 +595,6 @@ install_ubuntu_2404() {
 
 # ─────────────────────────────────────────────
 # UBUNTU 22.04 LTS
-# Official guide: uses Python 3.10 (ships with
-# the OS — no PPA needed). Java always included.
 # https://docs.discord.red/en/stable/install_guides/ubuntu-2204.html
 # ─────────────────────────────────────────────
 install_ubuntu_2204() {
@@ -569,7 +604,6 @@ install_ubuntu_2204() {
     run_step "Updating package lists" \
         sudo apt-get update -q
 
-    # Official docs use python3.10 for 22.04
     run_step "Installing system packages" \
         sudo apt-get install -y -q \
             python3.10 python3.10-dev python3.10-venv \
@@ -599,9 +633,6 @@ install_ubuntu_2204() {
 
 # ─────────────────────────────────────────────
 # UBUNTU NON-LTS
-# Official docs state non-LTS is NOT supported
-# because Python 3.11 is unavailable.
-# We hard-stop here and point to 24.04.
 # https://docs.discord.red/en/stable/install_guides/ubuntu-non-lts.html
 # ─────────────────────────────────────────────
 install_ubuntu_nonlts() {
@@ -618,9 +649,6 @@ install_ubuntu_nonlts() {
 
 # ─────────────────────────────────────────────
 # DEBIAN 12 BOOKWORM
-# Official guide: uses 'python3' package (which
-# resolves to 3.11 on Bookworm). Java always
-# included per official docs.
 # https://docs.discord.red/en/stable/install_guides/debian-12.html
 # ─────────────────────────────────────────────
 install_debian() {
@@ -630,13 +658,11 @@ install_debian() {
     run_step "Updating package lists" \
         sudo apt-get update -q
 
-    # Official docs use 'python3' (not python3.11 explicitly) on Debian 12
     run_step "Installing system packages" \
         sudo apt-get install -y -q \
             python3 python3-dev python3-venv \
             git build-essential nano openjdk-17-jre-headless
 
-    # python3 on Debian 12 Bookworm resolves to 3.11
     run_step "Creating Python virtual environment" \
         create_venv python3.11
 
@@ -661,8 +687,6 @@ install_debian() {
 
 # ─────────────────────────────────────────────
 # RASPBERRY PI OS 12 (LEGACY BOOKWORM)
-# Official guide: same packages as Debian 12.
-# Only works on RPi OS 12 Bookworm specifically.
 # https://docs.discord.red/en/stable/install_guides/raspberry-pi-os-12.html
 # ─────────────────────────────────────────────
 install_raspbian() {
@@ -672,7 +696,6 @@ install_raspbian() {
     run_step "Updating package lists" \
         sudo apt-get update -q
 
-    # Same package list as Debian 12 per official docs
     run_step "Installing system packages" \
         sudo apt-get install -y -q \
             python3 python3-dev python3-venv \
@@ -702,10 +725,7 @@ install_raspbian() {
 
 # ─────────────────────────────────────────────
 # RHEL 8 FAMILY
-# Covers: RHEL 8.10, Alma 8, Oracle 8, Rocky 8
-# Official guide requires: dnf update, group
-# install development, then python3.11 + java.
-# Java alternatives must be set after install.
+# Covers: RHEL 8, Alma 8, Oracle 8, Rocky 8
 # https://docs.discord.red/en/stable/install_guides/rhel-8.html
 # ─────────────────────────────────────────────
 install_rhel8() {
@@ -718,13 +738,11 @@ install_rhel8() {
     run_step "Installing development tools group" \
         sudo dnf -y group install development
 
-    # Java always included per official docs
     run_step "Installing Python 3.11, Git, Java 17 and nano" \
         sudo dnf -y install \
             python3.11 python3.11-devel \
             git java-17-openjdk-headless nano
 
-    # Official docs require setting java alternatives after install
     run_step "Setting Java 17 as default" \
         sudo alternatives --set java "java-17-openjdk.$(uname -i)"
 
@@ -754,15 +772,12 @@ install_rhel8() {
 # RHEL 9 FAMILY
 # Covers: RHEL 9, Alma 9, Oracle 9, Rocky 9,
 #         CentOS Stream 9
-# Official guide: single dnf install with Java
-# always included. No alternatives step needed.
 # https://docs.discord.red/en/stable/install_guides/rhel-9.html
 # ─────────────────────────────────────────────
 install_rhel9() {
     TOTAL_STEPS=4
     [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=5
 
-    # Java always included per official docs
     run_step "Installing system packages" \
         sudo dnf -y install \
             python3.11 python3.11-devel \
@@ -792,11 +807,6 @@ install_rhel9() {
 
 # ─────────────────────────────────────────────
 # FEDORA
-# Official guide: uses Adoptium Temurin repo
-# for Java 17 (Fedora doesn't ship OpenJDK 17
-# in main repos). Java only installed if user
-# wants audio since the official guide lists it
-# as a separate optional step.
 # https://docs.discord.red/en/stable/install_guides/fedora.html
 # ─────────────────────────────────────────────
 install_fedora() {
@@ -810,7 +820,6 @@ install_fedora() {
             git @development-tools nano
 
     if [[ "$WANT_AUDIO" == true ]]; then
-        # Official guide: install Adoptium repo then temurin-17-jre
         run_step "Installing Java 17 via Adoptium Temurin" \
             bash -c "sudo dnf -y install adoptium-temurin-java-repository && \
                      sudo dnf config-manager setopt adoptium-temurin-java-repository.enabled=1 && \
@@ -841,16 +850,12 @@ install_fedora() {
 
 # ─────────────────────────────────────────────
 # AMAZON LINUX 2023
-# Official guide: uses Amazon Corretto for Java.
-# Java always included in the official package
-# list regardless of audio choice.
 # https://docs.discord.red/en/stable/install_guides/amazon-linux-2023.html
 # ─────────────────────────────────────────────
 install_amazon() {
     TOTAL_STEPS=4
     [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=5
 
-    # Java (java-17-amazon-corretto-headless) always included per official docs
     run_step "Installing system packages" \
         sudo dnf -y install \
             python3.11 python3.11-devel \
@@ -880,9 +885,6 @@ install_amazon() {
 
 # ─────────────────────────────────────────────
 # openSUSE LEAP 15.6+ AND TUMBLEWEED
-# Official guide: identical package list for
-# both. Java always included. devel_basis is
-# the openSUSE equivalent of build-essential.
 # https://docs.discord.red/en/stable/install_guides/opensuse-leap-15.html
 # https://docs.discord.red/en/stable/install_guides/opensuse-tumbleweed.html
 # ─────────────────────────────────────────────
@@ -890,7 +892,6 @@ install_opensuse() {
     TOTAL_STEPS=4
     [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=5
 
-    # Java always included per official docs for both Leap and Tumbleweed
     run_step "Installing system packages" \
         bash -c "sudo zypper -n install \
                      python311 python311-devel \
@@ -919,16 +920,11 @@ install_opensuse() {
     show_summary
 }
 
-# Both openSUSE variants use the same function
 install_opensuse_leap()       { install_opensuse; }
 install_opensuse_tumbleweed() { install_opensuse; }
 
 # ─────────────────────────────────────────────
 # ARCH LINUX
-# Official guide: Python 3.11 from AUR since
-# Arch ships newer Python by default. Note the
-# official guide uses 'makepkg -sicL' without
-# --noconfirm as it may need user interaction.
 # https://docs.discord.red/en/stable/install_guides/arch.html
 # ─────────────────────────────────────────────
 install_arch() {
@@ -940,8 +936,6 @@ install_arch() {
     run_step "Installing system packages" \
         sudo pacman -Syu --noconfirm $pkgs
 
-    # Official guide: clone from AUR and build with makepkg -sicL
-    # This step can take a few minutes as it compiles from source
     run_step "Installing Python 3.11 from AUR (this takes a few minutes)" \
         bash -c "git clone https://aur.archlinux.org/python311.git /tmp/python311 && \
                  cd /tmp/python311 && \
@@ -973,11 +967,6 @@ install_arch() {
 
 # ─────────────────────────────────────────────
 # macOS
-# Official guide: uses Homebrew for Python 3.11,
-# git and Temurin Java 17. PATH must be updated
-# after install so python3.11 is found.
-# macOS uses launchd not systemd so no service
-# setup is offered.
 # https://docs.discord.red/en/stable/install_guides/mac.html
 # ─────────────────────────────────────────────
 install_macos() {
@@ -998,7 +987,6 @@ install_macos() {
     cecho "$YELLOW" "  ⏱  Estimated time: 5-15 minutes depending on your connection."
     echo
 
-    # After — forces read from the terminal directly
     printf "${BOLD}  Ready to begin? [y/N]: ${RESET}"
     read -r answer </dev/tty
     if [[ ! "$answer" =~ ^[Yy]$ ]]; then
@@ -1012,32 +1000,27 @@ install_macos() {
 
     TOTAL_STEPS=4
 
-    # Install Homebrew if not already present
     if ! command -v brew &>/dev/null; then
         TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
         run_step "Installing Homebrew" \
             bash -c '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
 
-        # Add brew to PATH — location differs on Apple Silicon vs Intel
         local brew_loc
         brew_loc="$([ "$(/usr/bin/uname -m)" = "arm64" ] \
             && echo /opt/homebrew \
             || echo /usr/local)/bin/brew"
         eval "$("$brew_loc" shellenv)"
 
-        # Persist brew in shell profile
         printf '\neval "$(%s shellenv)"\n' "$brew_loc" >> \
             "$([ -n "${ZSH_VERSION:-}" ] && echo ~/.zprofile \
                || ([ -f ~/.bash_profile ] && echo ~/.bash_profile || echo ~/.profile))"
     fi
 
-    # Official guide: brew install python@3.11 git (+ temurin@17 for audio)
     local brew_pkgs="python@3.11 git"
     [[ "$WANT_AUDIO" == true ]] && brew_pkgs="$brew_pkgs temurin@17"
     run_step "Installing Python 3.11, git${WANT_AUDIO:+ and Java 17} via Homebrew" \
         brew install $brew_pkgs
 
-    # Official guide: add python@3.11 bin dir to PATH
     local python_path
     python_path="$(brew --prefix)/opt/python@3.11/bin"
     export PATH="${python_path}:$PATH"
@@ -1068,17 +1051,10 @@ install_macos() {
     echo   "    source ~/redenv/bin/activate"
     echo   "    redbot ${INSTANCE_NAME}"
     echo
-    cecho "$YELLOW" "  To run Red on login, look into adding a launchd plist —"
-    echo   "  the README has more info on that."
-    echo
 }
 
 # ─────────────────────────────────────────────
 # OS ROUTER
-# Matches the detected OS_ID to the right
-# installer function. ID_LIKE is a fallback
-# for distros that share a parent (e.g. Manjaro
-# is ID_LIKE=arch).
 # ─────────────────────────────────────────────
 route_os() {
     case "$OS_ID" in
@@ -1089,8 +1065,8 @@ route_os() {
                 *)     install_ubuntu_nonlts ;;
             esac
             ;;
-        debian)              install_debian              ;;
-        raspbian)            install_raspbian            ;;
+        debian)              install_debian               ;;
+        raspbian)            install_raspbian             ;;
         almalinux|rhel|ol)
             case "$OS_VERSION" in
                 8*) install_rhel8 ;;
@@ -1105,14 +1081,13 @@ route_os() {
                 *)  unsupported   ;;
             esac
             ;;
-        centos)              install_rhel9              ;;
-        fedora)              install_fedora             ;;
-        amzn)                install_amazon             ;;
-        opensuse-leap)       install_opensuse_leap      ;;
+        centos)              install_rhel9               ;;
+        fedora)              install_fedora              ;;
+        amzn)                install_amazon              ;;
+        opensuse-leap)       install_opensuse_leap       ;;
         opensuse-tumbleweed) install_opensuse_tumbleweed ;;
-        arch)                install_arch               ;;
+        arch)                install_arch                ;;
         *)
-            # Fallback — check the parent distro family via ID_LIKE
             if   [[ "$OS_ID_LIKE" == *"debian"* ]] || [[ "$OS_ID_LIKE" == *"ubuntu"* ]]; then
                 cecho "$YELLOW" "  Detected Debian-like distro: ${OS_NAME}"
                 cecho "$YELLOW" "  Attempting Debian install method..."
@@ -1136,12 +1111,10 @@ route_os() {
 
 # ═══════════════════════════════════════════════════════════
 # MAIN
-# Entry point — runs safety checks, collects
-# user input, then routes to the right installer.
 # ═══════════════════════════════════════════════════════════
 main() {
     show_banner
-    check_macos   # exits here if macOS, handled separately
+    check_macos
 
     detect_os
 
