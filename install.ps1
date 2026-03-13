@@ -82,33 +82,50 @@ function Invoke-Step {
 }
 
 # ─────────────────────────────────────────────
-# CHECK: WSL environment
-# WSL_DISTRO_NAME is always set by WSL itself.
+# CHECK: Non-Windows environment
+# $IsLinux / $IsMacOS are built into PowerShell
+# Core and are $true whenever pwsh runs outside
+# Windows — including native Linux and macOS.
+# WSL_DISTRO_NAME is always set by WSL itself;
 # WSL_INTEROP is a fallback for older WSL builds.
-# If either is present we're inside WSL and the
+# All of these cases are non-Windows and the
 # Windows-specific tooling (choco, cmd /c
-# activate.bat) will not work here.
+# activate.bat) will not work in any of them.
 # We give them two clear options so they land in
 # the right place.
 # ─────────────────────────────────────────────
 function Assert-NotWSL {
-    $isWSL = ($null -ne $env:WSL_DISTRO_NAME) -or ($null -ne $env:WSL_INTEROP)
-    if ($isWSL) {
+    $isWSL     = ($null -ne $env:WSL_DISTRO_NAME) -or ($null -ne $env:WSL_INTEROP)
+    $isNonWin  = ($IsLinux -eq $true) -or ($IsMacOS -eq $true)
+
+    if ($isWSL -or $isNonWin) {
         Write-Colour ""
-        Write-Colour "  +----------------------------------------------------------+" "Yellow"
-        Write-Colour "  |    Powershell in WSL is a interesting move, but not      |" "Yellow"
-        Write-Colour "  |                   the right one here!                    |" "Yellow"
-        Write-Colour "  +----------------------------------------------------------+" "Yellow"
-        Write-Colour ""
-        Write-Colour "  This script is built for Windows, not Linux." "White"
-        Write-Colour ""
-        Write-Colour "  Want Red inside WSL? Run the bash script directly in your" "White"
-        Write-Colour "  WSL terminal (e.g. Ubuntu from the Start Menu):" "White"
+        if ($isWSL) {
+            Write-Colour "  +----------------------------------------------------------+" "Yellow"
+            Write-Colour "  |   PowerShell in WSL is an interesting move, but not      |" "Yellow"
+            Write-Colour "  |                   the right one here!                    |" "Yellow"
+            Write-Colour "  +----------------------------------------------------------+" "Yellow"
+            Write-Colour ""
+            Write-Colour "  This script is built for Windows, not Linux." "White"
+            Write-Colour ""
+            Write-Colour "  Want Red inside WSL? Run the bash script directly in your" "White"
+            Write-Colour "  WSL terminal (e.g. Ubuntu from the Start Menu):" "White"
+        } else {
+            Write-Colour "  +----------------------------------------------------------+" "Yellow"
+            Write-Colour "  |  PowerShell on Linux/macOS is an interesting move, but  |" "Yellow"
+            Write-Colour "  |                   not the right one here!                |" "Yellow"
+            Write-Colour "  +----------------------------------------------------------+" "Yellow"
+            Write-Colour ""
+            Write-Colour "  This script is built for Windows, not Linux/macOS." "White"
+            Write-Colour ""
+            Write-Colour "  Want Red on Linux/macOS? Run the bash script directly in" "White"
+            Write-Colour "  your terminal:" "White"
+        }
         Write-Colour ""
         Write-Colour "    curl -fsSL https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.sh | bash" "Cyan"
         Write-Colour ""
         Write-Colour "  Want Red on native Windows instead? Open a real PowerShell" "White"
-        Write-Colour "  window (not WSL) as Administrator and run:" "White"
+        Write-Colour "  window as Administrator and run:" "White"
         Write-Colour ""
         Write-Colour "    irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex" "Cyan"
         Write-Colour ""
