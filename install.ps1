@@ -99,6 +99,7 @@ function Assert-NotWSL {
     $isNonWin  = ($IsLinux -eq $true) -or ($IsMacOS -eq $true)
 
     if ($isWSL -or $isNonWin) {
+        Clear-Host
         Write-Colour ""
         if ($isWSL) {
             Write-Colour "  +----------------------------------------------------------+" "Yellow"
@@ -134,6 +135,7 @@ function Assert-NotWSL {
         Write-Colour ""
         Write-Colour "  https://github.com/BigPattyOG/red-installer/" "Cyan"
         Write-Colour ""
+        Read-Host "  Press Enter to exit"
         exit 1
     }
 }

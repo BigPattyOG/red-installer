@@ -5,6 +5,7 @@
 
 case "$(uname -s 2>/dev/null)" in
     MINGW*|CYGWIN*|MSYS*)
+        clear
         echo ""
         echo "  +----------------------------------------------------------+"
         echo "  |                Wrong script for Windows!                 |"
@@ -28,6 +29,7 @@ case "$(uname -s 2>/dev/null)" in
         echo ""
         echo "  https://github.com/BigPattyOG/red-installer/"
         echo ""
+        read -r -p "  Press Enter to exit..." _
         exit 1
         ;;
 esac
@@ -47,6 +49,7 @@ esac
 if [[ -n "${WSL_DISTRO_NAME:-}" ]] || \
    grep -qi microsoft /proc/version 2>/dev/null || \
    grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+    clear
     echo ""
     echo "  +----------------------------------------------------------+"
     echo "  |              Looks like you're using WSL!                |"
@@ -73,6 +76,7 @@ if [[ -n "${WSL_DISTRO_NAME:-}" ]] || \
     echo ""
     echo "  https://github.com/BigPattyOG/red-installer/"
     echo ""
+    read -r -p "  Press Enter to exit..." _
     exit 1
 fi
 
