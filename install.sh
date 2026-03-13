@@ -114,6 +114,22 @@ EOF
 }
 
 # ─────────────────────────────────────────────
+# SETUP STEP HEADER
+# Clears screen, shows banner, then shows which
+# step of the interactive setup we are on so the
+# screen stays clean between questions.
+# ─────────────────────────────────────────────
+show_setup_header() {
+    local step="$1"
+    local total="$2"
+    local title="$3"
+    show_banner
+    printf "  ${CYAN}${BOLD}[Setup: Step %d of %d]${RESET}  %s\n" "$step" "$total" "$title"
+    printf "  ${CYAN}──────────────────────────────────────────────${RESET}\n"
+    echo
+}
+
+# ─────────────────────────────────────────────
 # macOS DETECTION
 # uname -s returns "Darwin" on macOS.
 # We detect it early and hand off to the
@@ -216,6 +232,16 @@ LOG_FILE="$(mktemp /tmp/redbot_install.XXXXXX.log)"
 STEP_NUM=0
 TOTAL_STEPS=0
 
+# Arrays that track each completed step for the install screen
+declare -a STEP_HISTORY_LABELS=()
+declare -a STEP_HISTORY_OK=()
+
+# ─────────────────────────────────────────────
+# SPINNER
+# Animates on the current step line while the
+# background process runs. Uses \r to stay in
+# place rather than scrolling the screen.
+# ─────────────────────────────────────────────
 spinner() {
     local pid="$1"
     local delay=0.08
@@ -224,58 +250,48 @@ spinner() {
     tput civis 2>/dev/null || true
     while kill -0 "$pid" 2>/dev/null; do
         i=$(( (i + 1) % 4 ))
-        printf "\r    ${CYAN}[%s]${RESET} %s" "${spin:$i:1}" "$CURRENT_STEP"
+        printf "\r  ${CYAN}${spin:$i:1}${RESET}  [%d/%d] %s" "$STEP_NUM" "$TOTAL_STEPS" "$CURRENT_STEP"
         sleep "$delay"
     done
     tput cnorm 2>/dev/null || true
 }
 
 # ─────────────────────────────────────────────
-# PROGRESS BAR
-# Renders a filled/empty block bar that grows
-# as each step completes.  Called after every
-# successful run_step so the user can see at
-# a glance how far along the install is.
+# DRAW INSTALL SCREEN
+# Clears the terminal and redraws the banner
+# plus all completed steps before showing the
+# current step. Keeps the display clean and
+# gives the user a live tally of progress.
 # ─────────────────────────────────────────────
-show_progress_bar() {
-    local current="$1"
-    local total="$2"
-    [[ "$total" -le 0 ]] && return
-    local bar_width=30
-    local filled=$(( current * bar_width / total ))
-    local empty
-    [[ "$current" -eq "$total" ]] && filled=$bar_width
-    empty=$(( bar_width - filled ))
-    local bar="" i
-    for (( i=0; i<filled; i++ )); do bar+="█"; done
-    for (( i=0; i<empty; i++ )); do bar+="░"; done
-    # Omit trailing newline so the next step's \r can overwrite this bar line.
-    # Only the final step adds \n to leave a clean terminal state.
-    if [[ "$current" -eq "$total" ]]; then
-        printf "  ${CYAN}[%s]${RESET} %d of %d steps complete\n" "$bar" "$current" "$total"
-    else
-        printf "  ${CYAN}[%s]${RESET} %d of %d steps complete" "$bar" "$current" "$total"
-    fi
+draw_install_screen() {
+    show_banner
+    printf "  ${CYAN}${BOLD}Installing Red-DiscordBot${RESET}\n"
+    printf "  ${CYAN}──────────────────────────────────────────────${RESET}\n"
+    echo
+
+    for i in "${!STEP_HISTORY_LABELS[@]}"; do
+        if [[ "${STEP_HISTORY_OK[$i]}" == "1" ]]; then
+            printf "  ${GREEN}✓${RESET}  %s\n" "${STEP_HISTORY_LABELS[$i]}"
+        else
+            printf "  ${RED}✗${RESET}  %s\n" "${STEP_HISTORY_LABELS[$i]}"
+        fi
+    done
 }
 
 # ─────────────────────────────────────────────
 # RUN STEP
-# Wraps any function with a step counter,
-# spinner, and ✓ or ✗ result.
-# $@ = all arguments after the message.
-# $? = the exit code of the last command.
+# Clears the screen and redraws the install
+# status before each step, then runs it with
+# a spinner. Marks it done or failed and saves
+# it so the next step can display it.
 # ─────────────────────────────────────────────
 run_step() {
     local message="$1"; shift
     STEP_NUM=$(( STEP_NUM + 1 ))
     CURRENT_STEP="$message"
-    # Step 1 starts on a fresh line; steps 2+ overwrite the progress bar with \r.
-    # \e[K clears any leftover characters from the bar to the end of the line.
-    if [[ "$STEP_NUM" -eq 1 ]]; then
-        printf "\n  ${BOLD}[Step %d/%d]${RESET} %s\e[K" "$STEP_NUM" "$TOTAL_STEPS" "$message"
-    else
-        printf "\r  ${BOLD}[Step %d/%d]${RESET} %s\e[K" "$STEP_NUM" "$TOTAL_STEPS" "$message"
-    fi
+
+    draw_install_screen
+    printf "  ${CYAN}►${RESET}  [%d/%d] %s" "$STEP_NUM" "$TOTAL_STEPS" "$message"
 
     ( "$@" ) >"$LOG_FILE" 2>&1 &
     local pid=$!
@@ -284,12 +300,13 @@ run_step() {
     set +e; wait "$pid"; local rc=$?; set -e
 
     if [[ "$rc" -eq 0 ]]; then
-        printf "\r  ${GREEN}${BOLD}[Step %d/%d]${RESET} ${GREEN}✓${RESET} %s\e[K\n" \
-            "$STEP_NUM" "$TOTAL_STEPS" "$message"
-        show_progress_bar "$STEP_NUM" "$TOTAL_STEPS"
+        printf "\r  ${GREEN}✓${RESET}  [%d/%d] %s\e[K\n" "$STEP_NUM" "$TOTAL_STEPS" "$message"
+        STEP_HISTORY_LABELS+=("$message")
+        STEP_HISTORY_OK+=("1")
     else
-        printf "\r  ${RED}${BOLD}[Step %d/%d]${RESET} ${RED}✗${RESET} %s\e[K\n" \
-            "$STEP_NUM" "$TOTAL_STEPS" "$message"
+        printf "\r  ${RED}✗${RESET}  [%d/%d] %s\e[K\n" "$STEP_NUM" "$TOTAL_STEPS" "$message"
+        STEP_HISTORY_LABELS+=("$message (FAILED)")
+        STEP_HISTORY_OK+=("0")
         echo
         cecho "$RED" "  Oopsie, something went wrong during: '${message}'"
         cecho "$RED" "  Full error log: ${LOG_FILE}"
@@ -332,46 +349,102 @@ unsupported() {
 }
 
 # ─────────────────────────────────────────────
+# DISCLAIMER
+# Shows what the script will change on the
+# system and asks the user to accept before
+# touching anything. Also nudges them to star.
+# ─────────────────────────────────────────────
+show_disclaimer() {
+    show_banner
+    printf "  ${YELLOW}${BOLD}Before we start — a quick heads up${RESET}\n"
+    printf "  ${CYAN}──────────────────────────────────────────────${RESET}\n"
+    echo
+    echo "  Here's what this script is about to do to your machine:"
+    echo
+    echo "    • Install system packages (Python 3.11, Git, build tools, Java if audio)"
+    echo "    • Create a Python virtual environment at ~/redenv"
+    echo "    • Download and install Red-DiscordBot and its Python dependencies"
+    echo "    • Create a Red instance config in your home directory"
+    echo "    • (Optional) Set up a systemd service so Red starts on boot"
+    echo
+    echo "  It uses sudo to install packages. Only standard system paths are touched."
+    echo "  No funny business."
+    echo
+    printf "  ${CYAN}──────────────────────────────────────────────${RESET}\n"
+    echo
+    printf "  ${BOLD}  ⭐  Also — if this saves you some headaches, please star the repo:${RESET}\n"
+    printf "  ${CYAN}      https://github.com/BigPattyOG/red-installer${RESET}\n"
+    echo
+    echo "  Stars help more people find this thing. It takes literally 2 seconds."
+    echo "  I'll pretend I'm not obsessively watching the star count. (I am.)"
+    echo
+    printf "  ${CYAN}──────────────────────────────────────────────${RESET}\n"
+    echo
+    printf "  ${BOLD}  I've read the above and I'm ready to proceed [y/N]: ${RESET}"
+    read -r answer </dev/tty
+    if [[ ! "$answer" =~ ^[Yy]$ ]]; then
+        echo
+        cecho "$YELLOW" "  Fair enough. No changes were made. Come back when you're ready."
+        echo
+        exit 0
+    fi
+}
+
+# ─────────────────────────────────────────────
 # INTERACTIVE RED SETUP
-# Collects all choices from the user before
-# any installation begins, so the install
-# itself can run without interruption.
+# Each question gets its own screen with a step
+# counter so the screen stays clean. Validates
+# prefix (rejects / prefix) and token length.
+# Collects PostgreSQL credentials if needed.
 # Every read uses </dev/tty so it always reads
 # from the terminal even when stdin is a pipe.
-# printf is used separately from read because
-# -p and </dev/tty conflict with each other.
 # ─────────────────────────────────────────────
 interactive_red_setup() {
-    echo
-    cecho "$BOLD" "  ── Red Instance Setup ──────────────────────────────────"
-    echo
+    local has_systemd=false
+    command -v systemctl &>/dev/null && has_systemd=true
 
-    # Instance name
-    echo   "  This helps Red know what your bot is on this device"
-    echo   "  Example: mybot, redbot, mainbot"
-    echo   "  This won't (and can't) change the bot's name on Discord"
+    # Base steps: name, path, backend, audio, token, prefix
+    local total_setup_steps=6
+    $has_systemd && total_setup_steps=$(( total_setup_steps + 1 ))
+    local step=0
+
+    # ── Step: Instance name ──────────────────
+    step=$(( step + 1 ))
+    show_setup_header "$step" "$total_setup_steps" "Instance Name"
+    echo   "  This is just a label so Red knows which bot is which on this machine."
+    echo   "  Examples: mybot, redbot, mainbot"
+    echo   "  It won't (and can't) change your bot's name on Discord."
     echo
     while true; do
         printf "  Instance name: "
         read -r INSTANCE_NAME </dev/tty
         [[ -n "${INSTANCE_NAME// }" ]] && break
-        cecho "$RED" "  Cannot be empty."
+        cecho "$RED" "  Can't be empty. Give it something to go by."
     done
 
-    # Data path
+    # ── Step: Data path ──────────────────────
+    step=$(( step + 1 ))
     local default_data="${HOME}/.local/share/Red-DiscordBot/${INSTANCE_NAME}"
+    show_setup_header "$step" "$total_setup_steps" "Data Storage Path"
+    echo   "  Where should Red store its data? Configs, cog data, all of it."
+    echo   "  Press Enter to use the default, or type a different path."
     echo
-    echo   "  Where should Red store its data?"
-    echo   "  Press Enter to use the default: ${default_data}"
-    printf "  Data path: "
+    echo   "  Default: ${default_data}"
+    echo
+    printf "  Data path [default: above]: "
     read -r DATA_DIR </dev/tty
     DATA_DIR="${DATA_DIR:-$default_data}"
 
-    # Backend
+    # ── Step: Backend ────────────────────────
+    step=$(( step + 1 ))
+    show_setup_header "$step" "$total_setup_steps" "Data Backend"
+    echo   "  How should Red store its data internally?"
     echo
-    echo   "  How do you want to store data for the bot?"
-    echo   "  1) JSON  (simple, no extra setup — recommended)"
-    echo   "  2) PostgreSQL  (advanced, requires a running PostgreSQL server)"
+    echo   "  1) JSON  — Simple flat files, no database needed. This is the one"
+    echo   "             90% of people should pick. Seriously, just pick this."
+    echo
+    echo   "  2) PostgreSQL — For the 10% who actually have a Postgres server"
+    echo   "                  running and know what they're doing."
     echo
     printf "  Choice [1/2, default 1]: "
     read -r backend_choice </dev/tty
@@ -380,56 +453,134 @@ interactive_red_setup() {
         *) BACKEND="json"     ;;
     esac
 
-    # Audio
+    # ── Step: PostgreSQL credentials (if needed) ──
+    PG_HOST=""
+    PG_PORT=""
+    PG_USER=""
+    PG_PASS=""
+    PG_DBNAME=""
+
+    if [[ "$BACKEND" == "postgres" ]]; then
+        total_setup_steps=$(( total_setup_steps + 1 ))
+        step=$(( step + 1 ))
+        show_setup_header "$step" "$total_setup_steps" "PostgreSQL Connection Details"
+        echo   "  Alright, you chose PostgreSQL. Let's get the connection details sorted."
+        echo   "  Leave any field blank to use its default (shown in brackets)."
+        echo
+        printf "  Database host [default: localhost]: "
+        read -r PG_HOST </dev/tty
+        PG_HOST="${PG_HOST:-localhost}"
+
+        while true; do
+            printf "  Database port [default: 5432]: "
+            read -r PG_PORT </dev/tty
+            PG_PORT="${PG_PORT:-5432}"
+            if [[ "$PG_PORT" =~ ^[0-9]+$ ]]; then break; fi
+            cecho "$RED" "  Port has to be a number. Try again."
+        done
+
+        printf "  Database username [default: redbot]: "
+        read -r PG_USER </dev/tty
+        PG_USER="${PG_USER:-redbot}"
+
+        echo
+        cecho  "$RED" "  NOTE: Password won't show as you type."
+        while true; do
+            printf "  Database password: "
+            read -r -s PG_PASS </dev/tty
+            echo
+            [[ -n "${PG_PASS// }" ]] && break
+            cecho "$RED" "  Password can't be empty — Red needs it to connect."
+        done
+
+        printf "  Database name [default: redbot]: "
+        read -r PG_DBNAME </dev/tty
+        PG_DBNAME="${PG_DBNAME:-redbot}"
+    fi
+
+    # ── Step: Audio ──────────────────────────
+    step=$(( step + 1 ))
+    show_setup_header "$step" "$total_setup_steps" "Audio Support"
+    echo   "  Want your bot to play music? This installs Java 17, which Red's"
+    echo   "  Audio cog needs to run its built-in Lavalink server."
     echo
-    echo   "  Do you wanna blast your tunes through your bot?"
-    echo   "  (Audio support uses Java 17 + Lavalink — see the README for setup)"
-    printf "  Enable audio? [y/N]: "
+    echo   "  You can skip this and enable it later — just know you'll need"
+    echo   "  Java on the system before audio will work."
+    echo
+    printf "  Enable audio support? [y/N]: "
     read -r audio_choice </dev/tty
     WANT_AUDIO=false
     [[ "$audio_choice" =~ ^[Yy]$ ]] && WANT_AUDIO=true
 
-    # Bot token
-    echo
-    echo   "  Next is your bot token, grab it from:"
+    # ── Step: Bot token ──────────────────────
+    step=$(( step + 1 ))
+    show_setup_header "$step" "$total_setup_steps" "Discord Bot Token"
+    echo   "  Grab your bot token from the Discord Developer Portal:"
     echo   "  https://discord.com/developers/applications"
-    cecho  "$RED" "  NOTE: It will not be shown as you type."
+    echo
+    echo   "  Go to your application → Bot → Reset Token."
+    echo   "  Copy the whole thing — it's a long string of random characters."
+    echo
+    cecho  "$RED" "  NOTE: The token won't show as you type. That's on purpose."
     echo
     while true; do
         printf "  Bot token: "
         read -r -s BOT_TOKEN </dev/tty
         echo
-        [[ -n "${BOT_TOKEN// }" ]] && break
-        cecho "$RED" "  With no token, you have no bot"
+        if [[ -z "${BOT_TOKEN// }" ]]; then
+            cecho "$RED" "  With no token, you have no bot. Try again."
+            continue
+        fi
+        if [[ "${#BOT_TOKEN}" -lt 50 ]]; then
+            cecho "$RED" "  That token looks too short (Discord tokens are 50+ characters)."
+            cecho "$RED" "  Double-check you copied the whole thing."
+            continue
+        fi
+        break
     done
 
-    # Prefix
+    # ── Step: Prefix ─────────────────────────
+    step=$(( step + 1 ))
+    show_setup_header "$step" "$total_setup_steps" "Command Prefix"
+    echo   "  This is the character your bot listens to. Like !help or ?play."
+    echo   "  Pick something short and memorable."
     echo
-    echo   "  Choose a command prefix for your bot (e.g. ! or ? or .)"
+    cecho  "$RED"    "  DO NOT use / as your prefix — it conflicts with Discord's"
+    cecho  "$RED"    "  built-in slash commands and things will get weird fast."
     echo
-    echo   "  e.g. ?help, !help, etc."
-    echo
-    cecho  "$RED" "  IT CAN'T BE /. DOESN'T WORK WELL WITH SLASH COMMANDS!"
-    printf "  Prefix [default: !]: "
-    read -r BOT_PREFIX </dev/tty
-    BOT_PREFIX="${BOT_PREFIX:-!}"
+    while true; do
+        printf "  Command prefix [default: !]: "
+        read -r BOT_PREFIX </dev/tty
+        BOT_PREFIX="${BOT_PREFIX:-!}"
+        if [[ "$BOT_PREFIX" == /* ]]; then
+            cecho "$RED" "  Nope. Anything starting with / is off the table."
+            cecho "$RED" "  Pick something else (!, ?, ., etc.)"
+            BOT_PREFIX=""
+            continue
+        fi
+        break
+    done
 
-    # Systemd (Linux only)
+    # ── Step: Systemd (Linux only) ───────────
     WANT_SYSTEMD=false
-    if command -v systemctl &>/dev/null; then
+    if $has_systemd; then
+        step=$(( step + 1 ))
+        show_setup_header "$step" "$total_setup_steps" "Auto-Start Service"
+        echo   "  Want Red to start automatically whenever this machine boots up?"
+        echo   "  We can set it up as a systemd service. Recommended if this is a server."
         echo
-        echo   "  Want this bot to always be on? We can set it up as a service"
-        echo   "  so it starts automatically whenever this machine boots up."
-        printf "  Set up service? [Y/n]: "
+        printf "  Set up systemd service? [Y/n]: "
         read -r svc_choice </dev/tty
         [[ ! "$svc_choice" =~ ^[Nn]$ ]] && WANT_SYSTEMD=true
     fi
 
     export INSTANCE_NAME DATA_DIR BACKEND BOT_TOKEN BOT_PREFIX WANT_AUDIO WANT_SYSTEMD
+    export PG_HOST PG_PORT PG_USER PG_PASS PG_DBNAME
 
+    show_banner
+    printf "  ${GREEN}${BOLD}✓ Setup details saved. Starting installation...${RESET}\n"
     echo
-    cecho "$GREEN" "  ✓ Setup details saved. Starting installation..."
-    echo
+    sleep 1
 }
 
 # ─────────────────────────────────────────────
@@ -467,18 +618,73 @@ install_red_into_venv() {
 
 # ─────────────────────────────────────────────
 # SHARED: CONFIGURE RED INSTANCE
-# Runs redbot-setup with all options as flags
-# so no interactive prompts are needed.
+# For JSON backend: runs redbot-setup with all
+# options as flags — fully non-interactive.
+# For PostgreSQL: writes the config directly
+# via a Python helper to avoid the interactive
+# getpass prompt inside redbot-setup.
 # ─────────────────────────────────────────────
 configure_red_instance() {
     # shellcheck disable=SC1091
     source "${HOME}/redenv/bin/activate"
     mkdir -p "$DATA_DIR"
-    redbot-setup \
-        --instance-name "$INSTANCE_NAME" \
-        --data-path "$DATA_DIR" \
-        --backend "$BACKEND" \
-        --no-prompt
+
+    if [[ "$BACKEND" == "postgres" ]]; then
+        # Write the postgres config via an inline Python script.
+        # redbot-setup for postgres calls getpass interactively, so we bypass
+        # it and write the instance config file directly.
+        local pg_script
+        pg_script=$(mktemp /tmp/redbot_pg.XXXXXX.py)
+        cat > "$pg_script" << 'PYEOF'
+import json, os
+from pathlib import Path
+
+instance_name = os.environ["INSTANCE_NAME"]
+data_dir      = os.environ["DATA_DIR"]
+pg_host       = os.environ.get("PG_HOST") or None
+pg_port_s     = os.environ.get("PG_PORT", "")
+pg_port       = int(pg_port_s) if pg_port_s and pg_port_s.isdigit() else None
+pg_user       = os.environ.get("PG_USER") or None
+pg_pass       = os.environ.get("PG_PASS") or None
+pg_dbname     = os.environ.get("PG_DBNAME") or None
+
+try:
+    from platformdirs import user_config_dir
+    cfg_dir = Path(user_config_dir("Red-DiscordBot"))
+except Exception:
+    cfg_dir = Path.home() / ".config" / "Red-DiscordBot"
+
+cfg_dir.mkdir(parents=True, exist_ok=True)
+cfg_file = cfg_dir / "config.json"
+
+cfg = json.loads(cfg_file.read_text(encoding="utf-8")) if cfg_file.exists() else {}
+cfg[instance_name] = {
+    "DATA_PATH": data_dir,
+    "STORAGE_TYPE": "postgres",
+    "STORAGE_DETAILS": {
+        "host":     pg_host,
+        "port":     pg_port,
+        "user":     pg_user,
+        "password": pg_pass,
+        "database": pg_dbname,
+    },
+}
+cfg_file.write_text(json.dumps(cfg, indent=4), encoding="utf-8")
+print(f"Config written to {cfg_file}")
+PYEOF
+        INSTANCE_NAME="$INSTANCE_NAME" DATA_DIR="$DATA_DIR" \
+        PG_HOST="$PG_HOST"   PG_PORT="$PG_PORT" \
+        PG_USER="$PG_USER"   PG_PASS="$PG_PASS" \
+        PG_DBNAME="$PG_DBNAME" \
+        python "$pg_script"
+        rm -f "$pg_script"
+    else
+        redbot-setup \
+            --instance-name "$INSTANCE_NAME" \
+            --data-path "$DATA_DIR" \
+            --backend "$BACKEND" \
+            --no-prompt
+    fi
 }
 
 # ─────────────────────────────────────────────
@@ -573,10 +779,12 @@ EOF
     if [[ "$WANT_AUDIO" == true ]]; then
         cat <<EOF
 
-  Audio note:
-    Java is installed. To finish audio setup you'll need to run
-    a Lavalink server. Check the README for instructions:
-    https://github.com/BigPattyOG/red-installer#audio-setup
+  Audio setup:
+    Java 17 is installed and ready. To enable audio in your bot:
+      1. Start Red and log in to Discord
+      2. Run: [p]load audio
+      3. That's it — Red manages Lavalink itself.
+    Full audio docs: https://docs.discord.red/en/stable/cog_guides/audio.html
 EOF
     fi
 
@@ -600,8 +808,12 @@ EOF
 # https://docs.discord.red/en/stable/install_guides/ubuntu-2404.html
 # ─────────────────────────────────────────────
 install_ubuntu_2404() {
-    TOTAL_STEPS=6
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=7
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="openjdk-17-jre-headless"
+
+    TOTAL_STEPS=5
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Updating package lists" \
         sudo apt-get update -q
@@ -612,9 +824,9 @@ install_ubuntu_2404() {
                  sudo apt-get update -q"
 
     run_step "Installing system packages" \
-        sudo apt-get install -y -q \
+        bash -c "sudo apt-get install -y -q \
             python3.11 python3.11-dev python3.11-venv \
-            git build-essential nano openjdk-17-jre-headless
+            git build-essential nano ${java_pkg}"
 
     run_step "Creating Python virtual environment" \
         create_venv python3.11
@@ -625,7 +837,9 @@ install_ubuntu_2404() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -643,16 +857,20 @@ install_ubuntu_2404() {
 # https://docs.discord.red/en/stable/install_guides/ubuntu-2204.html
 # ─────────────────────────────────────────────
 install_ubuntu_2204() {
-    TOTAL_STEPS=5
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=6
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="openjdk-17-jre-headless"
+
+    TOTAL_STEPS=4
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Updating package lists" \
         sudo apt-get update -q
 
     run_step "Installing system packages" \
-        sudo apt-get install -y -q \
+        bash -c "sudo apt-get install -y -q \
             python3.10 python3.10-dev python3.10-venv \
-            git build-essential nano openjdk-17-jre-headless
+            git build-essential nano ${java_pkg}"
 
     run_step "Creating Python virtual environment" \
         create_venv python3.10
@@ -663,7 +881,9 @@ install_ubuntu_2204() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -697,16 +917,20 @@ install_ubuntu_nonlts() {
 # https://docs.discord.red/en/stable/install_guides/debian-12.html
 # ─────────────────────────────────────────────
 install_debian() {
-    TOTAL_STEPS=5
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=6
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="openjdk-17-jre-headless"
+
+    TOTAL_STEPS=4
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Updating package lists" \
         sudo apt-get update -q
 
     run_step "Installing system packages" \
-        sudo apt-get install -y -q \
+        bash -c "sudo apt-get install -y -q \
             python3 python3-dev python3-venv \
-            git build-essential nano openjdk-17-jre-headless
+            git build-essential nano ${java_pkg}"
 
     run_step "Creating Python virtual environment" \
         create_venv python3.11
@@ -717,7 +941,9 @@ install_debian() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -735,16 +961,20 @@ install_debian() {
 # https://docs.discord.red/en/stable/install_guides/raspberry-pi-os-12.html
 # ─────────────────────────────────────────────
 install_raspbian() {
-    TOTAL_STEPS=5
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=6
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="openjdk-17-jre-headless"
+
+    TOTAL_STEPS=4
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Updating package lists" \
         sudo apt-get update -q
 
     run_step "Installing system packages" \
-        sudo apt-get install -y -q \
+        bash -c "sudo apt-get install -y -q \
             python3 python3-dev python3-venv \
-            git build-essential nano openjdk-17-jre-headless
+            git build-essential nano ${java_pkg}"
 
     run_step "Creating Python virtual environment" \
         create_venv python3.11
@@ -755,7 +985,9 @@ install_raspbian() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -774,8 +1006,12 @@ install_raspbian() {
 # https://docs.discord.red/en/stable/install_guides/rhel-8.html
 # ─────────────────────────────────────────────
 install_rhel8() {
-    TOTAL_STEPS=6
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=7
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="java-17-openjdk-headless"
+
+    TOTAL_STEPS=5
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Updating system packages" \
         sudo dnf -y update
@@ -783,13 +1019,15 @@ install_rhel8() {
     run_step "Installing development tools group" \
         sudo dnf -y group install development
 
-    run_step "Installing Python 3.11, Git, Java 17 and nano" \
-        sudo dnf -y install \
+    run_step "Installing Python 3.11, Git and nano" \
+        bash -c "sudo dnf -y install \
             python3.11 python3.11-devel \
-            git java-17-openjdk-headless nano
+            git nano ${java_pkg}"
 
-    run_step "Setting Java 17 as default" \
-        sudo alternatives --set java "java-17-openjdk.$(uname -i)"
+    if [[ "$WANT_AUDIO" == true ]]; then
+        run_step "Setting Java 17 as default" \
+            sudo alternatives --set java "java-17-openjdk.$(uname -i)"
+    fi
 
     run_step "Creating Python virtual environment" \
         create_venv python3.11
@@ -800,7 +1038,9 @@ install_rhel8() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -820,13 +1060,17 @@ install_rhel8() {
 # https://docs.discord.red/en/stable/install_guides/rhel-9.html
 # ─────────────────────────────────────────────
 install_rhel9() {
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="java-17-openjdk-headless"
+
     TOTAL_STEPS=4
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=5
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Installing system packages" \
-        sudo dnf -y install \
+        bash -c "sudo dnf -y install \
             python3.11 python3.11-devel \
-            git java-17-openjdk-headless @development nano
+            git @development nano ${java_pkg}"
 
     run_step "Creating Python virtual environment" \
         create_venv python3.11
@@ -837,7 +1081,9 @@ install_rhel9() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -880,7 +1126,9 @@ install_fedora() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -898,13 +1146,17 @@ install_fedora() {
 # https://docs.discord.red/en/stable/install_guides/amazon-linux-2023.html
 # ─────────────────────────────────────────────
 install_amazon() {
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="java-17-amazon-corretto-headless"
+
     TOTAL_STEPS=4
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=5
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Installing system packages" \
-        sudo dnf -y install \
+        bash -c "sudo dnf -y install \
             python3.11 python3.11-devel \
-            git java-17-amazon-corretto-headless @development nano
+            git @development nano ${java_pkg}"
 
     run_step "Creating Python virtual environment" \
         create_venv python3.11
@@ -915,7 +1167,9 @@ install_amazon() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -934,13 +1188,17 @@ install_amazon() {
 # https://docs.discord.red/en/stable/install_guides/opensuse-tumbleweed.html
 # ─────────────────────────────────────────────
 install_opensuse() {
+    local java_pkg=""
+    [[ "$WANT_AUDIO" == true ]] && java_pkg="java-17-openjdk-headless"
+
     TOTAL_STEPS=4
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=5
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     run_step "Installing system packages" \
         bash -c "sudo zypper -n install \
                      python311 python311-devel \
-                     git-core java-17-openjdk-headless nano && \
+                     git-core nano ${java_pkg} && \
                  sudo zypper -n install -t pattern devel_basis"
 
     run_step "Creating Python virtual environment" \
@@ -952,7 +1210,9 @@ install_opensuse() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -974,7 +1234,8 @@ install_opensuse_tumbleweed() { install_opensuse; }
 # ─────────────────────────────────────────────
 install_arch() {
     TOTAL_STEPS=5
-    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=6
+    [[ "$WANT_AUDIO" == true ]]   && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
+    [[ "$WANT_SYSTEMD" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     local pkgs="git base-devel nano"
     [[ "$WANT_AUDIO" == true ]] && pkgs="$pkgs jre17-openjdk-headless"
@@ -997,7 +1258,9 @@ install_arch() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -1032,18 +1295,14 @@ install_macos() {
     cecho "$YELLOW" "  ⏱  Estimated time: 5-15 minutes depending on your connection."
     echo
 
-    printf "${BOLD}  Ready to begin? [y/N]: ${RESET}"
-    read -r answer </dev/tty
-    if [[ ! "$answer" =~ ^[Yy]$ ]]; then
-        cecho "$YELLOW" "  Cancelled. No changes were made."
-        exit 0
-    fi
+    show_disclaimer
 
     check_disk_space
     check_internet
     interactive_red_setup
 
     TOTAL_STEPS=4
+    [[ "$WANT_AUDIO" == true ]] && TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
 
     if ! command -v brew &>/dev/null; then
         TOTAL_STEPS=$(( TOTAL_STEPS + 1 ))
@@ -1082,7 +1341,9 @@ install_macos() {
     run_step "Configuring Red instance" \
         bash -c "$(declare -f configure_red_instance); \
                  INSTANCE_NAME='$INSTANCE_NAME' DATA_DIR='$DATA_DIR' \
-                 BACKEND='$BACKEND' configure_red_instance"
+                 BACKEND='$BACKEND' PG_HOST='$PG_HOST' PG_PORT='$PG_PORT' \
+                 PG_USER='$PG_USER' PG_PASS='$PG_PASS' PG_DBNAME='$PG_DBNAME' \
+                 configure_red_instance"
 
     run_step "Setting bot token and prefix" \
         bash -c "$(declare -f set_token_and_prefix); \
@@ -1175,16 +1436,8 @@ main() {
     cecho "$YELLOW" "  ⏱  Estimated time: 5-15 minutes depending on your connection."
     echo
 
-    printf "${BOLD}  Ready to begin? [y/N]: ${RESET}"
-    read -r answer </dev/tty
-    if [[ ! "$answer" =~ ^[Yy]$ ]]; then
-        echo
-        cecho "$YELLOW" "  Cancelled. No changes were made."
-        echo
-        exit 0
-    fi
+    show_disclaimer
 
-    echo
     check_disk_space
     check_internet
     require_sudo

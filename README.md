@@ -1,20 +1,88 @@
-# Red Installer 🤖
+# Red Installer
 
-An unofficial community installer for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot) that takes the pain out of getting Red up and running.
-
-No more copy-pasting commands one by one — just run the script and it'll walk you through everything.
+> An unofficial community installer for [Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot). Because nobody should have to copy-paste ten commands just to get a bot running.
 
 ---
 
-## What is this?
+## Star This If It Saves You Time
 
-Red is a self-hosted, fully modular Discord bot. It's awesome. Setting it up however... not always the most fun experience.
+Seriously. It takes 2 seconds. I'm not going to pretend I don't check the star count.
 
-This installer handles all of that for you. It detects your OS, installs the right dependencies, sets up a Python virtual environment, installs Red, and gets your bot configured — all in one go.
+**[Star on GitHub](https://github.com/BigPattyOG/red-installer)** --- It helps more people find this thing.
 
 ---
 
-## Supported Operating Systems
+## What Even Is This?
+
+Red is a powerful, self-hosted, fully modular Discord bot. It's great. The setup process, on the other hand, is a wall of commands that most people really don't want to deal with.
+
+So I made this. One command. It figures out your OS, installs what it needs, sets up Python properly, and walks you through getting your bot configured. No PhD required.
+
+---
+
+## Just Run It
+
+### Linux / macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.sh | bash
+```
+
+### Windows
+
+Open PowerShell **as Administrator** and paste this:
+
+```powershell
+irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex
+```
+
+That's it. The script takes it from there.
+
+> **Wrong terminal?** If you accidentally ran the `.sh` script on Windows, it'll catch that and tell you what to do instead. I thought of you.
+
+---
+
+## What It Does To Your Machine
+
+Before doing anything, the installer will show you exactly what it's going to touch and ask you to confirm. No surprises.
+
+The short version:
+
+1. Checks your OS, disk space, and internet (you're welcome)
+2. Installs Python, Git, and build tools for your platform
+3. Creates an isolated Python virtual environment for Red (so it doesn't stomp on anything else)
+4. Downloads and installs Red-DiscordBot
+5. Asks you a few questions to set up your bot instance
+6. Optionally sets up a systemd service so Red starts when the machine does (Linux only)
+
+---
+
+## The Questions It Will Ask You
+
+The installer walks you through each question on its own screen so it doesn't just dump everything at once. Here's what it'll want:
+
+**Instance name** --- just a label. `mybot`, `redbot`, whatever. It's not your bot's Discord name, just how your machine identifies it.
+
+**Data path** --- where Red stores its stuff. Hit Enter to use the default. You probably want the default.
+
+**Backend** --- how Red stores data internally:
+- `JSON` --- simple flat files, no database needed. **Pick this unless you have a reason not to.**
+- `PostgreSQL` --- if you actually have a Postgres server running and know what you're doing. The installer will ask for your connection details (host, port, username, password, database name).
+
+**Audio** --- want your bot to play music? Say yes and Java 17 gets installed. Red handles the rest itself (no Lavalink fiddling required from your end). You can skip this and add it later.
+
+**Bot token** --- get it from the [Discord Developer Portal](https://discord.com/developers/applications). It won't show on screen while you type. That's intentional, not a bug.
+
+> The installer validates your token length. If it's shorter than 50 characters, it'll tell you to go back and copy the whole thing.
+
+
+> **Do not use `/`.** It will cause weirdness with Discord's built-in slash commands. The installer will literally refuse to let you do this and ask you again.
+
+**Systemd service (Linux only)** --- want Red to survive reboots? Say yes and the installer sets up a service that starts your bot automatically.
+
+---
+
+## Supported Systems
 
 ### Linux
 | OS | Version |
@@ -33,190 +101,121 @@ This installer handles all of that for you. It detects your OS, installs the rig
 | openSUSE Tumbleweed | Latest |
 | Arch Linux | Latest |
 
-### Other
+### Everything Else
 | OS | Notes |
 |---|---|
-| macOS | Intel and Apple Silicon supported |
-| Windows | Via PowerShell + Chocolatey |
+| macOS | Intel and Apple Silicon, both work |
+| Windows | PowerShell + Chocolatey --- runs as Administrator |
 
-> **Ubuntu non-LTS (e.g. 24.10)** is not supported. The official Red docs confirm Python 3.11 isn't available on non-LTS releases right now. Stick with 24.04 LTS.
-
----
-
-## How to Use
-
-### Linux / macOS
-
-Open a terminal and run:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.sh | bash
-```
-
-### Windows
-
-Open PowerShell **as Administrator** and run:
-
-```powershell
-irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex
-```
-
-> **Note:** If you accidentally run the `.sh` script on Windows (e.g. via Git Bash), it'll catch that and tell you to use the PowerShell one instead. No harm done.
-
-### WSL (Windows Subsystem for Linux)
-
-Both scripts detect WSL and guide you to the right place:
-
-- **Running the bash script inside WSL** — it'll spot that and offer you two choices: carry on and install Red inside WSL (by running the bash script directly in your WSL terminal), or switch to the PowerShell script for a native Windows install instead.
-- **Running the PowerShell script inside a WSL PowerShell session** — it'll catch that too and redirect you before anything breaks, since the Windows-specific tooling (Chocolatey, `cmd`, etc.) won't work inside WSL.
-
-**Want Red inside WSL?** Open your WSL terminal (e.g. Ubuntu from the Start Menu) and run:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.sh | bash
-```
-
-**Want Red on native Windows?** Open a regular PowerShell window (not WSL) as Administrator and run the PowerShell script as shown above.
+> **Ubuntu non-LTS (23.10, 24.10, etc.)** --- not supported. The Red team themselves say Python 3.11 is not reliably available on non-LTS Ubuntu. Just use 24.04 LTS and save yourself the headache.
 
 ---
 
-## What It Does
+## WSL Users
 
-Once you kick it off, the installer will:
+Both scripts detect WSL and stop you before things go wrong.
 
-1. ✅ Check your OS and pick the right install method
-2. ✅ Check you have enough disk space and a working internet connection
-3. ✅ Install Python, Git and the required build tools for your OS
-4. ✅ Create an isolated Python virtual environment for Red
-5. ✅ Install Red-DiscordBot (with PostgreSQL support if you choose it)
-6. ✅ Ask you to set up your bot instance — name, data path, backend, token and prefix
-7. ✅ Optionally set up a systemd service so your bot starts on boot (Linux only)
+**If you're running the bash script inside WSL:** it'll offer you two options --- stay in WSL and install Red there, or switch to the PowerShell script for a proper native Windows install.
 
----
+**If you accidentally ran the PowerShell script inside a WSL PowerShell session:** it'll catch that and redirect you, because Chocolatey and cmd.exe have no business being in WSL.
 
-## Setup Options
-
-The installer will ask you a few things before it does anything. Here's what to expect:
-
-**Instance name** — just a label so Red knows which bot is which on this machine. Something like `mybot` or `redbot`. This doesn't change your bot's name on Discord.
-
-**Data path** — where Red stores its data. You can just hit Enter to use the default.
-
-**Backend** — how Red stores data:
-- `JSON` — simple, no extra setup needed. Recommended for most people.
-- `PostgreSQL` — for advanced users who already have a PostgreSQL server running.
-
-**Audio** — do you want music support? This installs Java 17 on your machine ready to go.
-
-**Bot token** — grab this from the [Discord Developer Portal](https://discord.com/developers/applications). It won't show on screen as you type.
-
-**Prefix** — the character your bot responds to. `!`, `?`, `.` etc.
-> ⚠️ Don't use `/` �� it doesn't play nicely with Discord's slash commands.
-
-**Service (Linux only)** — want the bot to start automatically on boot? Say yes and we'll set up a systemd service for you.
-
----
-
-## After the Install
-
-The installer gets Red fully set up and running. For anything beyond that — like setting up audio cogs, adding cogs, configuring permissions or connecting to PostgreSQL — the official Red docs have you covered:
-
-👉 [Red Documentation](https://docs.discord.red/en/stable/)
-👉 [Getting Started with Red](https://docs.discord.red/en/stable/getting_started.html)
-👉 [Audio Setup](https://docs.discord.red/en/stable/cog_guides/audio.html)
-👉 [Installing Cogs](https://docs.discord.red/en/stable/cog_guides/index.html)
-👉 [PostgreSQL Setup](https://docs.discord.red/en/stable/postgres.html)
+Want Red inside WSL? Open your WSL terminal (Ubuntu from the Start Menu, for example) and run the bash command above directly.
 
 ---
 
 ## Managing Your Bot
 
-### If you set up a systemd service (Linux)
+### Systemd (Linux)
 
 ```bash
-# Check if it's running
-sudo systemctl status red@yourinstancename
-
-# See live logs
-sudo journalctl -eu red@yourinstancename -f
-
-# Restart it
+sudo systemctl status  red@yourinstancename
+sudo journalctl -eu    red@yourinstancename -f
 sudo systemctl restart red@yourinstancename
-
-# Stop it
-sudo systemctl stop red@yourinstancename
+sudo systemctl stop    red@yourinstancename
 ```
 
-### Starting manually
+### Running Manually
 
 **Linux / macOS:**
-
 ```bash
 source ~/redenv/bin/activate
 redbot yourinstancename
 ```
 
-**Windows — open Command Prompt (not PowerShell) and run:**
-
+**Windows (Command Prompt --- not PowerShell):**
 ```cmd
-%userprofile%\redenv\Scripts\activate.bat
+%userprofile%edenv\Scriptsctivate.bat
 redbot yourinstancename
 ```
 
 ---
 
+## Audio Setup
+
+When you say yes to audio, the installer puts Java 17 on your machine. That's all you need.
+
+To actually turn on audio in your bot:
+1. Start Red and log in to Discord
+2. Run `[p]load audio` in your server
+3. Done
+
+Red handles Lavalink internally. You don't need to set up a separate server. If you want the full details anyway: [Audio Cog Docs](https://docs.discord.red/en/stable/cog_guides/audio.html)
+
+---
+
 ## Updating Red
 
-Whenever a new version of Red drops, just run this inside your activated virtual environment:
+When a new version drops:
 
 **Linux / macOS:**
-
 ```bash
 source ~/redenv/bin/activate
 python -m pip install -U Red-DiscordBot
 ```
 
 **Windows (Command Prompt):**
-
 ```cmd
-%userprofile%\redenv\Scripts\activate.bat
+%userprofile%edenv\Scriptsctivate.bat
 python -m pip install -U Red-DiscordBot
 ```
 
-Or if you're using PostgreSQL:
-
+PostgreSQL users:
 ```bash
 python -m pip install -U "Red-DiscordBot[postgres]"
 ```
 
 ---
 
-## Something Went Wrong?
+## Something Broke
 
-If the installer falls over on a step it'll show you the exact error. On Linux/macOS the full log is saved to `/tmp/redbot_install.log` if you need more detail.
+If the installer fails on a step, it'll show you the error right there. On Linux/macOS, the full log gets saved to a file in `/tmp` --- the exact path is printed when something goes wrong.
 
-If you're stuck, feel free to [open an issue](https://github.com/BigPattyOG/red-installer/issues) and let me know what OS you're on. I'll take a look as soon as I can.
-
----
-
-## This Isn't an Official Red Project
-
-This installer is an unofficial community tool. For the official installation guides head to:
-
-👉 [docs.discord.red](https://docs.discord.red/en/stable/install_guides/)
-
-For Red itself:
-
-👉 [Cog-Creators/Red-DiscordBot](https://github.com/Cog-Creators/Red-DiscordBot)
+Still stuck? [Open an issue](https://github.com/BigPattyOG/red-installer/issues) and tell me your OS. I'll take a look.
 
 ---
 
-## Give It a Star ⭐
+## Useful Links
 
-If this saved you some time, a star on GitHub would mean a lot!
-
-👉 [https://github.com/BigPattyOG/red-installer](https://github.com/BigPattyOG/red-installer)
+| | |
+|---|---|
+| Red Documentation | https://docs.discord.red/en/stable/ |
+| Official Install Guides | https://docs.discord.red/en/stable/install_guides/ |
+| Audio Setup | https://docs.discord.red/en/stable/cog_guides/audio.html |
+| PostgreSQL Setup | https://docs.discord.red/en/stable/postgres.html |
+| Red on GitHub | https://github.com/Cog-Creators/Red-DiscordBot |
 
 ---
 
-*Made with ❤️ by BigPattyOG*
+## Disclaimer
+
+This is an unofficial community project, not endorsed by the Red team. I'm just a person who got tired of doing this manually. The official docs are at [docs.discord.red](https://docs.discord.red/en/stable/install_guides/).
+
+---
+
+## Seriously Though, Star It
+
+If this saved you 20 minutes of copy-pasting, a star is a nice way to say thanks. It also helps other people find this instead of suffering through the manual process.
+
+**[https://github.com/BigPattyOG/red-installer](https://github.com/BigPattyOG/red-installer)**
+
+*Made by BigPattyOG --- the one watching the star count way too closely*

@@ -37,17 +37,60 @@ function Show-Banner {
 }
 
 # ─────────────────────────────────────────────
-# STEP COUNTER
-# Tracks progress through the install steps.
-# Script-scoped so all functions can update it.
+# SETUP STEP HEADER
+# Clears screen, shows banner, then shows which
+# step of the interactive setup we're on.
 # ─────────────────────────────────────────────
-$script:StepNum    = 0
-$script:TotalSteps = 0
+function Show-SetupHeader {
+    param([int]$Step, [int]$Total, [string]$Title)
+    Show-Banner
+    Write-Host "  " -NoNewline
+    Write-Host "[Setup: Step $Step of $Total]" -ForegroundColor Cyan -NoNewline
+    Write-Host "  $Title"
+    Write-Colour "  ──────────────────────────────────────────────" "Cyan"
+    Write-Colour ""
+}
+
+# ─────────────────────────────────────────────
+# STEP TRACKING
+# Script-scoped arrays that keep a history of
+# completed steps for the install screen.
+# ─────────────────────────────────────────────
+$script:StepNum          = 0
+$script:TotalSteps       = 0
+$script:StepHistoryLabels = @()
+$script:StepHistoryOK     = @()
+
+# ─────────────────────────────────────────────
+# DRAW INSTALL SCREEN
+# Clears the terminal and redraws the banner
+# plus all completed steps so the user gets a
+# live tally of progress before each new step.
+# ─────────────────────────────────────────────
+function Draw-InstallScreen {
+    Show-Banner
+    Write-Host "  " -NoNewline
+    Write-Host "Installing Red-DiscordBot" -ForegroundColor Cyan
+    Write-Colour "  ──────────────────────────────────────────────" "Cyan"
+    Write-Colour ""
+
+    for ($i = 0; $i -lt $script:StepHistoryLabels.Count; $i++) {
+        if ($script:StepHistoryOK[$i]) {
+            Write-Host "  " -NoNewline
+            Write-Host "✓" -ForegroundColor Green -NoNewline
+            Write-Host "  $($script:StepHistoryLabels[$i])"
+        } else {
+            Write-Host "  " -NoNewline
+            Write-Host "✗" -ForegroundColor Red -NoNewline
+            Write-Host "  $($script:StepHistoryLabels[$i])"
+        }
+    }
+}
 
 # ─────────────────────────────────────────────
 # RUN STEP
-# Wraps a script block with a step counter and
-# success/failure output.
+# Draws the install screen, shows the current
+# step, runs it, then marks it done or failed.
 # ─────────────────────────────────────────────
 function Invoke-Step {
     param(
@@ -56,23 +99,27 @@ function Invoke-Step {
     )
 
     $script:StepNum++
-    Write-Host ""
+    Draw-InstallScreen
     Write-Host "  " -NoNewline
-    Write-Host "[Step $($script:StepNum)/$($script:TotalSteps)]" -ForegroundColor Cyan -NoNewline
-    Write-Host " $Message"
+    Write-Host "►" -ForegroundColor Cyan -NoNewline
+    Write-Host "  [$($script:StepNum)/$($script:TotalSteps)] $Message"
 
     try {
         & $Action
+        $script:StepHistoryLabels += $Message
+        $script:StepHistoryOK     += $true
+        Draw-InstallScreen
         Write-Host "  " -NoNewline
-        Write-Host "[Step $($script:StepNum)/$($script:TotalSteps)]" -ForegroundColor Green -NoNewline
-        Write-Host " v " -ForegroundColor Green -NoNewline
-        Write-Host "$Message"
+        Write-Host "✓" -ForegroundColor Green -NoNewline
+        Write-Host "  [$($script:StepNum)/$($script:TotalSteps)] $Message"
+        Write-Colour ""
     }
     catch {
+        $script:StepHistoryLabels += "$Message (FAILED)"
+        $script:StepHistoryOK     += $false
         Write-Host "  " -NoNewline
-        Write-Host "[Step $($script:StepNum)/$($script:TotalSteps)]" -ForegroundColor Red -NoNewline
-        Write-Host " x " -ForegroundColor Red -NoNewline
-        Write-Host "$Message"
+        Write-Host "✗" -ForegroundColor Red -NoNewline
+        Write-Host "  [$($script:StepNum)/$($script:TotalSteps)] $Message"
         Write-Colour ""
         Write-Colour "  Oopsie, something went wrong during: '$Message'" "Red"
         Write-Colour "  Error: $_" "Red"
@@ -229,80 +276,201 @@ function Install-Chocolatey {
 }
 
 # ─────────────────────────────────────────────
+# DISCLAIMER
+# Shows what the script will change and asks
+# the user to accept before doing anything.
+# Also nudges them to star the repo.
+# ─────────────────────────────────────────────
+function Show-Disclaimer {
+    Show-Banner
+    Write-Colour "  Before we start — a quick heads up" "Yellow"
+    Write-Colour "  ──────────────────────────────────────────────" "Cyan"
+    Write-Colour ""
+    Write-Colour "  Here's what this script is about to do to your machine:" "White"
+    Write-Colour ""
+    Write-Colour "    • Install Chocolatey (if not already installed)" "White"
+    Write-Colour "    • Install Python 3.11, Git, and Visual C++ build tools via Chocolatey" "White"
+    Write-Colour "    • Create a Python virtual environment at %USERPROFILE%\redenv" "White"
+    Write-Colour "    • Download and install Red-DiscordBot and its dependencies" "White"
+    Write-Colour "    • Create a Red instance config in your AppData folder" "White"
+    Write-Colour "    • (Optional) Install Java 17 for audio support" "White"
+    Write-Colour ""
+    Write-Colour "  This script needs to run as Administrator to install packages." "White"
+    Write-Colour "  No funny business — only standard install locations are used." "White"
+    Write-Colour ""
+    Write-Colour "  ──────────────────────────────────────────────" "Cyan"
+    Write-Colour ""
+    Write-Colour "  ⭐  Also — if this saves you some headaches, please star the repo:" "White"
+    Write-Colour "      https://github.com/BigPattyOG/red-installer" "Cyan"
+    Write-Colour ""
+    Write-Colour "  Stars help more people find this thing. It takes literally 2 seconds." "White"
+    Write-Colour "  I'll pretend I'm not obsessively watching the star count. (I am.)" "White"
+    Write-Colour ""
+    Write-Colour "  ──────────────────────────────────────────────" "Cyan"
+    Write-Colour ""
+    $answer = Read-Host "  I've read the above and I'm ready to proceed [y/N]"
+    if ($answer -notmatch '^[Yy]$') {
+        Write-Colour ""
+        Write-Colour "  Fair enough. No changes were made. Come back when you're ready." "Yellow"
+        Write-Colour ""
+        exit 0
+    }
+}
+
+# ─────────────────────────────────────────────
 # INTERACTIVE SETUP
-# Collects all choices from the user before
-# any installation begins so the install itself
-# can run without interruption.
+# Each question gets its own screen with a step
+# counter so the display stays clean. Validates
+# token length and rejects / as a prefix.
+# Collects PostgreSQL credentials if selected.
 # Read-Host in PowerShell always reads from the
 # console directly so no /dev/tty equivalent
 # is needed here unlike the bash script.
 # ─────────────────────────────────────────────
 function Get-InstallOptions {
-    Write-Colour ""
-    Write-Colour "  ── Red Instance Setup ──────────────────────────────────" "White"
-    Write-Colour ""
+    # Base steps: name, path, backend, audio, token, prefix
+    $totalSteps = 6
+    $step = 0
 
-    # Instance name
-    Write-Colour "  This helps Red know what your bot is on this device" "White"
-    Write-Colour "  Example: mybot, redbot, mainbot" "White"
-    Write-Colour "  This won't (and can't) change the bot's name on Discord" "White"
+    # Step: Instance name
+    $step++
+    Show-SetupHeader -Step $step -Total $totalSteps -Title "Instance Name"
+    Write-Colour "  This is just a label so Red knows which bot is which on this machine." "White"
+    Write-Colour "  Examples: mybot, redbot, mainbot" "White"
+    Write-Colour "  It won't (and can't) change your bot's name on Discord." "White"
     Write-Colour ""
     do {
         $script:InstanceName = Read-Host "  Instance name"
     } while ([string]::IsNullOrWhiteSpace($script:InstanceName))
 
-    # Data path
+    # Step: Data path
+    $step++
     $defaultData = "$env:APPDATA\Red-DiscordBot\$($script:InstanceName)"
+    Show-SetupHeader -Step $step -Total $totalSteps -Title "Data Storage Path"
+    Write-Colour "  Where should Red store its data? Configs, cog data, all of it." "White"
+    Write-Colour "  Press Enter to use the default, or type a different path." "White"
     Write-Colour ""
-    Write-Colour "  Where should Red store its data?" "White"
-    Write-Colour "  Press Enter to use the default: $defaultData" "White"
-    $inputPath = Read-Host "  Data path"
+    Write-Colour "  Default: $defaultData" "White"
+    Write-Colour ""
+    $inputPath = Read-Host "  Data path [default: above]"
     $script:DataDir = if ([string]::IsNullOrWhiteSpace($inputPath)) { $defaultData } else { $inputPath }
 
-    # Backend
+    # Step: Backend
+    $step++
+    Show-SetupHeader -Step $step -Total $totalSteps -Title "Data Backend"
+    Write-Colour "  How should Red store its data internally?" "White"
     Write-Colour ""
-    Write-Colour "  How do you want to store data for the bot?" "White"
-    Write-Colour "  1) JSON  (simple, no extra setup — recommended)" "White"
-    Write-Colour "  2) PostgreSQL  (advanced, requires a running PostgreSQL server)" "White"
+    Write-Colour "  1) JSON  — Simple flat files, no database needed. This is the one" "White"
+    Write-Colour "             90% of people should pick. Seriously, just pick this." "White"
+    Write-Colour ""
+    Write-Colour "  2) PostgreSQL — For the 10% who actually have a Postgres server" "White"
+    Write-Colour "                  running and know what they're doing." "White"
     Write-Colour ""
     $backendChoice = Read-Host "  Choice [1/2, default 1]"
     $script:Backend = if ($backendChoice -eq "2") { "postgres" } else { "json" }
 
-    # Audio
+    # PostgreSQL credentials (if selected)
+    $script:PgHost   = ""
+    $script:PgPort   = ""
+    $script:PgUser   = ""
+    $script:PgPass   = ""
+    $script:PgDbname = ""
+
+    if ($script:Backend -eq "postgres") {
+        $totalSteps++
+        $step++
+        Show-SetupHeader -Step $step -Total $totalSteps -Title "PostgreSQL Connection Details"
+        Write-Colour "  Alright, you chose PostgreSQL. Let's get the connection details sorted." "White"
+        Write-Colour "  Leave any field blank to use its default (shown in brackets)." "White"
+        Write-Colour ""
+
+        $h = Read-Host "  Database host [default: localhost]"
+        $script:PgHost = if ([string]::IsNullOrWhiteSpace($h)) { "localhost" } else { $h }
+
+        do {
+            $p = Read-Host "  Database port [default: 5432]"
+            $script:PgPort = if ([string]::IsNullOrWhiteSpace($p)) { "5432" } else { $p }
+        } while (-not ($script:PgPort -match '^\d+$'))
+
+        $u = Read-Host "  Database username [default: redbot]"
+        $script:PgUser = if ([string]::IsNullOrWhiteSpace($u)) { "redbot" } else { $u }
+
+        Write-Colour ""
+        Write-Colour "  NOTE: Password won't show as you type." "Red"
+        do {
+            $securePgPass   = Read-Host "  Database password" -AsSecureString
+            $script:PgPass  = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                [Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePgPass)
+            )
+            if ([string]::IsNullOrWhiteSpace($script:PgPass)) {
+                Write-Colour "  Password can't be empty — Red needs it to connect." "Red"
+            }
+        } while ([string]::IsNullOrWhiteSpace($script:PgPass))
+
+        $d = Read-Host "  Database name [default: redbot]"
+        $script:PgDbname = if ([string]::IsNullOrWhiteSpace($d)) { "redbot" } else { $d }
+    }
+
+    # Step: Audio
+    $step++
+    Show-SetupHeader -Step $step -Total $totalSteps -Title "Audio Support"
+    Write-Colour "  Want your bot to play music? This installs Java 17, which Red's" "White"
+    Write-Colour "  Audio cog needs to run its built-in Lavalink server." "White"
     Write-Colour ""
-    Write-Colour "  Do you wanna blast your tunes through your bot?" "White"
-    Write-Colour "  (Audio support uses Java 17 + Lavalink — see the README for setup)" "White"
-    $audioChoice = Read-Host "  Enable audio? [y/N]"
+    Write-Colour "  You can skip this and enable it later — just know you'll need" "White"
+    Write-Colour "  Java on the system before audio will work." "White"
+    Write-Colour ""
+    $audioChoice = Read-Host "  Enable audio support? [y/N]"
     $script:WantAudio = ($audioChoice -match '^[Yy]$')
 
-    # Bot token
-    Write-Colour ""
-    Write-Colour "  Next is your bot token, grab it from:" "White"
+    # Step: Bot token
+    $step++
+    Show-SetupHeader -Step $step -Total $totalSteps -Title "Discord Bot Token"
+    Write-Colour "  Grab your bot token from the Discord Developer Portal:" "White"
     Write-Colour "  https://discord.com/developers/applications" "Cyan"
-    Write-Colour "  NOTE: It will not be shown as you type." "Red"
+    Write-Colour ""
+    Write-Colour "  Go to your application → Bot → Reset Token." "White"
+    Write-Colour "  Copy the whole thing — it's a long string of random characters." "White"
+    Write-Colour ""
+    Write-Colour "  NOTE: The token won't show as you type. That's on purpose." "Red"
     Write-Colour ""
     do {
-        # Read-Host -AsSecureString hides input like a password field
         $secureToken = Read-Host "  Bot token" -AsSecureString
-        # Convert secure string back to plain text so we can pass it to redbot
         $script:BotToken = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
             [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureToken)
         )
+        if ([string]::IsNullOrWhiteSpace($script:BotToken)) {
+            Write-Colour "  With no token, you have no bot. Try again." "Red"
+        } elseif ($script:BotToken.Length -lt 50) {
+            Write-Colour "  That token looks too short (Discord tokens are 50+ characters)." "Red"
+            Write-Colour "  Double-check you copied the whole thing." "Red"
+            $script:BotToken = ""
+        }
     } while ([string]::IsNullOrWhiteSpace($script:BotToken))
 
-    # Prefix
+    # Step: Prefix
+    $step++
+    Show-SetupHeader -Step $step -Total $totalSteps -Title "Command Prefix"
+    Write-Colour "  This is the character your bot listens to. Like !help or ?play." "White"
+    Write-Colour "  Pick something short and memorable." "White"
     Write-Colour ""
-    Write-Colour "  Choose a command prefix for your bot (e.g. ! or ? or .)" "White"
+    Write-Colour "  DO NOT use / as your prefix — it conflicts with Discord's" "Red"
+    Write-Colour "  built-in slash commands and things will get weird fast." "Red"
     Write-Colour ""
-    Write-Colour "  e.g. ?help, !help, etc." "White"
-    Write-Colour ""
-    Write-Colour "  IT CAN'T BE /. DOESN'T WORK WELL WITH SLASH COMMANDS!" "Red"
-    $prefixInput = Read-Host "  Prefix [default: !]"
-    $script:BotPrefix = if ([string]::IsNullOrWhiteSpace($prefixInput)) { "!" } else { $prefixInput }
+    do {
+        $prefixInput = Read-Host "  Command prefix [default: !]"
+        $script:BotPrefix = if ([string]::IsNullOrWhiteSpace($prefixInput)) { "!" } else { $prefixInput }
+        if ($script:BotPrefix.StartsWith("/")) {
+            Write-Colour "  Nope. Anything starting with / is off the table." "Red"
+            Write-Colour "  Pick something else (!, ?, ., etc.)" "Red"
+            $script:BotPrefix = ""
+        }
+    } while ([string]::IsNullOrWhiteSpace($script:BotPrefix))
 
+    Show-Banner
+    Write-Colour "  ✓ Setup details saved. Starting installation..." "Green"
     Write-Colour ""
-    Write-Colour "  v Setup details saved. Starting installation..." "Green"
-    Write-Colour ""
+    Start-Sleep -Seconds 1
 }
 
 # ─────────────────────────────────────────────
@@ -380,20 +548,77 @@ function Install-Red {
 
 # ─────────────────────────────────────────────
 # CONFIGURE RED INSTANCE
-# Runs redbot-setup with all options as flags
-# so no interactive prompts are needed.
+# For JSON: runs redbot-setup non-interactively.
+# For PostgreSQL: writes the config file via
+# a Python helper to bypass the interactive
+# getpass prompt inside redbot-setup.
 # mkdir with -Force creates the data dir if it
 # doesn't already exist, silently if it does.
 # ─────────────────────────────────────────────
 function Set-RedInstance {
     $activate = "$env:USERPROFILE\redenv\Scripts\activate.bat"
     New-Item -ItemType Directory -Force -Path $script:DataDir | Out-Null
-    $cmd = "$activate && redbot-setup " +
-           "--instance-name `"$($script:InstanceName)`" " +
-           "--data-path `"$($script:DataDir)`" " +
-           "--backend $($script:Backend) " +
-           "--no-prompt"
-    cmd /c $cmd
+
+    if ($script:Backend -eq "postgres") {
+        # Write the postgres config directly using Python.
+        # redbot-setup for postgres calls getpass interactively,
+        # so we bypass it and write the instance config file ourselves.
+        $pyScript = [System.IO.Path]::GetTempFileName() + ".py"
+        $pyCode = @"
+import json, os
+from pathlib import Path
+
+instance_name = os.environ['INSTANCE_NAME']
+data_dir      = os.environ['DATA_DIR']
+pg_host       = os.environ.get('PG_HOST') or None
+pg_port_s     = os.environ.get('PG_PORT', '')
+pg_port       = int(pg_port_s) if pg_port_s and pg_port_s.isdigit() else None
+pg_user       = os.environ.get('PG_USER') or None
+pg_pass       = os.environ.get('PG_PASS') or None
+pg_dbname     = os.environ.get('PG_DBNAME') or None
+
+try:
+    from platformdirs import user_config_dir
+    cfg_dir = Path(user_config_dir('Red-DiscordBot'))
+except Exception:
+    cfg_dir = Path(os.environ.get('APPDATA', Path.home())) / 'Red-DiscordBot'
+
+cfg_dir.mkdir(parents=True, exist_ok=True)
+cfg_file = cfg_dir / 'config.json'
+
+cfg = json.loads(cfg_file.read_text(encoding='utf-8')) if cfg_file.exists() else {}
+cfg[instance_name] = {
+    'DATA_PATH': data_dir,
+    'STORAGE_TYPE': 'postgres',
+    'STORAGE_DETAILS': {
+        'host':     pg_host,
+        'port':     pg_port,
+        'user':     pg_user,
+        'password': pg_pass,
+        'database': pg_dbname,
+    },
+}
+cfg_file.write_text(json.dumps(cfg, indent=4), encoding='utf-8')
+print(f'Config written to {cfg_file}')
+"@
+        Set-Content -Path $pyScript -Value $pyCode -Encoding UTF8
+        $env:INSTANCE_NAME = $script:InstanceName
+        $env:DATA_DIR       = $script:DataDir
+        $env:PG_HOST        = $script:PgHost
+        $env:PG_PORT        = $script:PgPort
+        $env:PG_USER        = $script:PgUser
+        $env:PG_PASS        = $script:PgPass
+        $env:PG_DBNAME      = $script:PgDbname
+        cmd /c "$activate && python `"$pyScript`""
+        Remove-Item -Path $pyScript -ErrorAction SilentlyContinue
+    } else {
+        $cmd = "$activate && redbot-setup " +
+               "--instance-name `"$($script:InstanceName)`" " +
+               "--data-path `"$($script:DataDir)`" " +
+               "--backend $($script:Backend) " +
+               "--no-prompt"
+        cmd /c $cmd
+    }
 }
 
 # ─────────────────────────────────────────────
@@ -438,11 +663,12 @@ function Show-Summary {
 
     if ($script:WantAudio) {
         Write-Colour ""
-        Write-Colour "  Audio note:" "Yellow"
-        Write-Colour "    Java 17 is installed. To finish audio setup you'll need" "White"
-        Write-Colour "    to run a Lavalink server alongside your bot." "White"
-        Write-Colour "    Check the README for full instructions:" "White"
-        Write-Colour "    https://github.com/BigPattyOG/red-installer#audio-setup" "Cyan"
+        Write-Colour "  Audio setup:" "Yellow"
+        Write-Colour "    Java 17 is installed and ready. To enable audio in your bot:" "White"
+        Write-Colour "      1. Start Red and log in to Discord" "White"
+        Write-Colour "      2. Run: [p]load audio" "White"
+        Write-Colour "      3. That's it — Red manages Lavalink itself." "White"
+        Write-Colour "    Full audio docs: https://docs.discord.red/en/stable/cog_guides/audio.html" "Cyan"
     }
 
     Write-Colour ""
@@ -478,14 +704,7 @@ function Main {
     Assert-Internet
     Assert-DiskSpace
 
-    Write-Colour ""
-    $answer = Read-Host "  Ready to begin? [y/N]"
-    if ($answer -notmatch '^[Yy]$') {
-        Write-Colour ""
-        Write-Colour "  Cancelled. No changes were made." "Yellow"
-        Write-Colour ""
-        exit 0
-    }
+    Show-Disclaimer
 
     # Collect all user choices before any installation starts
     Get-InstallOptions
