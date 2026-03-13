@@ -62,7 +62,7 @@ if [[ -n "${WSL_DISTRO_NAME:-}" ]] || \
     echo ""
     echo "       irm https://raw.githubusercontent.com/BigPattyOG/red-installer/main/install.ps1 | iex"
     echo ""
-    echo "  2) Run you're curl command again directly in WSL"
+    echo "  2) Run your curl command again directly in WSL"
     echo "     Open your WSL terminal directly (e.g. Ubuntu from the"
     echo "     Start Menu) and run this script from there:"
     echo ""

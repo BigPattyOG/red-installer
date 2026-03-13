@@ -102,7 +102,7 @@ function Assert-NotWSL {
         Write-Colour ""
         if ($isWSL) {
             Write-Colour "  +----------------------------------------------------------+" "Yellow"
-            Write-Colour "  |   Powershell in WSL is an interesting move, but not      |" "Yellow"
+            Write-Colour "  |   PowerShell in WSL is an interesting move, but not      |" "Yellow"
             Write-Colour "  |                   the right one here!                    |" "Yellow"
             Write-Colour "  +----------------------------------------------------------+" "Yellow"
             Write-Colour ""
